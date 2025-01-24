@@ -26,12 +26,12 @@ int main() {
   argparser_add_help_to_argparser(&parser, false);
   argparser_add_abbrev_to_argparser(&parser, false);
 
-  argparser_add_argument(parser, "-h", "--help");   // valid
-  argparser_add_argument(parser, NULL, "version");  // valid
-  argparser_add_argument(parser, "-A", NULL);       // valid
-  argparser_add_argument(parser, NULL, "--force");  // valid
-  argparser_add_argument(parser, NULL, NULL);       // not valid
-  argparser_add_argument(parser, NULL, "--force");  // not valid
+  argparser_add_argument(parser, "-h", "--help");     // valid
+  argparser_add_argument(parser, NULL, "version");    // valid
+  argparser_add_argument(parser, "-A", NULL);         // valid
+  argparser_add_argument(parser, NULL, "--force");    // valid
+  argparser_add_argument(parser, NULL, NULL);         // not valid
+  argparser_add_argument(parser, NULL, "--force");    // not valid
   argparser_add_argument(parser, NULL, "-export");    // not valid
   argparser_add_argument(parser, "n", "name");        // not valid
   argparser_add_argument(parser, "-t", "terminate");  // not valid

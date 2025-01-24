@@ -153,6 +153,7 @@ void argparser_add_abbrev_to_argparser(argparser **parser, bool allow_abbrev);
  *         1 indicates argument formatting error,
  *         2 indicates failed to allocate memory for argument,
  *         5 indicates parser is NULL.
+ *         6 indicates argument already exists.
  */
 int argparser_add_argument(argparser *parser, char short_name[2],
                            char *long_name);

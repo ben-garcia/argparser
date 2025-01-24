@@ -149,7 +149,8 @@ static void arg_destroy(void **arg) {
  *         -2 for error, short_name MUST contain dash(-) followed by alpha char.
  *         -3 for error, long_name cannot start with '--' for positional arg.
  *         -4 for error, long_name cannot start with '-' for positional arg.
- *         -5 SHOULD NOT RETURN THIS VALUE.
+ *         -5 for error, cannot mix positional and optional arguments.
+ *         -6 SHOULD NOT RETURN THIS VALUE.
  */
 static int determine_argument(char short_name[2], char *long_name) {
   if (short_name == NULL && long_name == NULL) {
@@ -162,7 +163,7 @@ static int determine_argument(char short_name[2], char *long_name) {
   } else if (short_name == NULL && (strncmp(long_name, "--", 2) == 0)) {
     return 3;
   } else if (short_name == NULL && long_name[0] == '-') {
-    LOG_ERROR("long_name start with (-) for positional arg (%s:%s)", short_name,
+    LOG_ERROR("positional arg cannot begin with dash (-) (%s:%s)", short_name,
               long_name);
     return -4;
   }
@@ -170,7 +171,7 @@ static int determine_argument(char short_name[2], char *long_name) {
   int short_length = strlen(short_name);
 
   if (short_length != 2 || short_name[0] != '-' || !isalpha(short_name[1])) {
-    LOG_ERROR("wrong flag format (%s:%s)", short_name, long_name);
+    LOG_ERROR("invalid optional arg(%s:%s)", short_name, long_name);
     return -2;
   } else if (short_length == 2 && long_name == NULL) {
     // For optional argument with short_name as key.
@@ -178,10 +179,13 @@ static int determine_argument(char short_name[2], char *long_name) {
   } else if (short_length == 2 && strncmp(long_name, "--", 2) == 0) {
     // For optional argument with long_name as key.
     return 3;
+  } else if (short_name[0] == '-' && isalpha(short_name[1]) &&
+             long_name[0] != '-' && strncmp(long_name, "--", 2) != 0) {
+    LOG_ERROR("cannot mix positional and optional args (%s:%s)", short_name, long_name);
+    return -5;
   }
-
   LOG_ERROR("UNKNOWN arg error (%s:%s)", short_name, long_name);
-  return -5;
+  return -6;
 
   // // Default prefix character
   // if (parser->prefix_chars == NULL) {
@@ -283,6 +287,8 @@ int argparser_add_argument(argparser *parser, char short_name[2],
   int result = STATUS_SUCCESS;
   int arg_kind = 0;
   argparser_argument *arg = NULL;
+  void *value = NULL;
+  int search_result = -1;
 
   if (parser == NULL) {
     RETURN_DEFER(STATUS_IS_NULL);
@@ -291,31 +297,52 @@ int argparser_add_argument(argparser *parser, char short_name[2],
   arg_kind = determine_argument(short_name, long_name);
   if (arg_kind == 1) {
     // Positional argument
+
+    search_result = hash_table_search(parser->arguments, long_name, &value);
+    if (search_result == 0 && (value == NULL || value != NULL)) {
+      // There already exists an entry if value is not NULL.
+      // hash table is empty if value is NULL.
+      // either case exit.
+      RETURN_DEFER(6);
+    }
+
     if ((arg_create(&arg, NULL, long_name) != 0)) {
       RETURN_DEFER(STATUS_MEMORY_FAILURE);
     }
 
-    if ((hash_table_insert(parser->arguments, long_name, arg) == 1)) {
-      FREE(arg);
-    }
+    hash_table_insert(parser->arguments, long_name, arg);
   } else if (arg_kind == 2) {
     // Optional argument with short_name as key.
+
+    search_result = hash_table_search(parser->arguments, short_name, &value);
+    if (search_result == 0 && (value == NULL || value != NULL)) {
+      // There already exists an entry if value is not NULL.
+      // hash table is empty if value is NULL.
+      // either case exit.
+      RETURN_DEFER(6);
+    }
+
     if ((arg_create(&arg, short_name, long_name) != 0)) {
       RETURN_DEFER(STATUS_MEMORY_FAILURE);
     }
 
-    if ((hash_table_insert(parser->arguments, short_name, arg)) == 1) {
-      FREE(arg);
-    }
+    hash_table_insert(parser->arguments, short_name, arg);
   } else if (arg_kind == 3) {
     // Optional argument with long_name as key.
+
+    search_result = hash_table_search(parser->arguments, long_name, &value);
+    if (search_result == 0 && (value == NULL || value != NULL)) {
+      // There already exists an entry if value is not NULL.
+      // hash table is empty if value is NULL.
+      // either case exit.
+      RETURN_DEFER(6);
+    }
+
     if ((arg_create(&arg, short_name, long_name) != 0)) {
       RETURN_DEFER(STATUS_MEMORY_FAILURE);
     }
 
-    if ((hash_table_insert(parser->arguments, long_name, arg)) == 1) {
-      FREE(arg);
-    }
+    hash_table_insert(parser->arguments, long_name, arg);
   } else {
     // Argument formatting error.
     RETURN_DEFER(STATUS_FAILURE);
