@@ -1,41 +1,42 @@
 #ifndef ARGPARSER_H
 #define ARGPARSER_H
 
-#include <stdbool.h>
+#define AP_FALSE 48
+#define AP_TRUE 49
 
 // Optional single input value.
-#define AP_ARG_NARGS_OPTIONAL "?"
+#define AP_ARG_OPTIONAL "?"
 // Takes zero or more inputs.
 // Values are stored in an array.
-#define AP_ARG_NARGS_ZERO_OR_MORE "*"
+#define AP_ARG_ZERO_OR_MORE "*"
 // Takes one or more inputs.
 // Values are stored in an array.
-#define AP_ARG_NARGS_ONE_OR_MORE "+"
+#define AP_ARG_ONE_OR_MORE "+"
 // Takes all remaining values from the command line.
 // Values are stored in an array.
-#define AP_ARG_NARGS_REMAINDER "!"
+#define AP_ARG_REMAINDER "!"
 
 // Parser argument type to convert to
 typedef enum argparser_arg_type {
-  AP_ARG_TYPE_FLOAT,   // Parser convert to float.
-  AP_ARG_TYPE_INT,     // Parser convert to integer.
-  AP_ARG_TYPE_STRING,  // Same as not setting the type arg.
-  AP_ARG_TYPE_BOOL,    // Parser convert to 0 false 1 true.
+  AP_ARG_FLOAT,   // Parser convert to float.
+  AP_ARG_INT,     // Parser convert to integer.
+  AP_ARG_STRING,  // Same as not setting the type arg.
+  AP_ARG_BOOL,    // Parser convert to 0 false 1 true.
 } argparser_arg_type;
 
 typedef struct argparser argparser;
 // Describes how to store the argument's value(s)
 // NOTE: 'store', 'append' or extend' can ONLY be used with positional args.
 typedef enum argparser_arg_action {
-  AP_ARG_ACTION_STORE,  // Store the argument's value. default action
-  AP_ARG_ACTION_STORE_CONST,   // Store value stored in const parameter.
-  AP_ARG_ACTION_STORE_TRUE,    // Store true if optional arg is passed.
-  AP_ARG_ACTION_STORE_FALSE,   // Store true if optional arg is passed.
-  AP_ARG_ACTION_STORE_APPEND,  // Stores values in an array.
-  AP_ARG_ACTION_STORE_APPEND_CONST,  // Store value in const parameter.
-  AAP_ARG_ACTION_STORE_EXTEND,  // Store values from same arg passed.
-  AP_ARG_ACTION_STORE_COUNT,  // Store the amount of times arg is passed.
-  AP_ARG_ACTION_STORE_VERSION,  // Print version of program and exit.
+  AP_ARG_STORE,               // Store the argument's value. default action
+  AP_ARG_STORE_CONST,         // Store value stored in const parameter.
+  AP_ARG_STORE_TRUE,          // Store true if optional arg is passed.
+  AP_ARG_STORE_FALSE,         // Store true if optional arg is passed.
+  AP_ARG_STORE_APPEND,        // Stores values in an array.
+  AP_ARG_STORE_APPEND_CONST,  // Store value in const parameter.
+  AP_ARG_STORE_EXTEND,        // Store values from same arg passed.
+  AP_ARG_STORE_COUNT,         // Store the amount of times arg is passed.
+  AP_ARG_STORE_VERSION,       // Print version of program and exit.
 } argparser_arg_action;
 
 /**
@@ -120,18 +121,23 @@ int argparser_add_prechars_to_argparser(argparser **parser, char *prefix_chars);
  * Add help to argparser.
  *
  * @param parser argparser to modify.
- * @param help -h/--help message if true by default.
+ * @param help -h/--help message if AP_TRUE by default.
+ *             valid values are 'AP_FALSE' and  'AP_TRUE'
+ *
+ * @return 0 on success, 1 indicates invalid 'allow_abbrev' value.
  */
-void argparser_add_help_to_argparser(argparser **parser, bool epilogue);
+int argparser_add_help_to_argparser(argparser **parser, char help);
 
 /**
  * Add allow abbrev to argparser.
  *
  * @param parser argparser to modify.
  * @param allow_abbrev Allow abbreviations of long optional arguments.
- *                     true by default.
+ *                     valid values are 'AP_FALSE' and  'AP_TRUE'
+ *
+ * @return 0 on success, 1 indicates invalid 'allow_abbrev' value.
  */
-void argparser_add_abbrev_to_argparser(argparser **parser, bool allow_abbrev);
+int argparser_add_abbrev_to_argparser(argparser **parser, char allow_abbrev);
 
 /**
  * Add argument to the parser.
@@ -178,10 +184,12 @@ int argparser_add_argument(argparser *parser, char short_name[2],
  * AP_ARG_ACTION_STORE_EXTEND,  // Store values from same arg passed.
  * AP_ARG_ACTION_STORE_COUNT,  // Store the amount of times arg is
  *                                       passed.
- * ARGPARSER_ARG_ACTION_STORE_VERSION,  // Print version of program and exit.
+ * AP_ARG_ACTION_STORE_VERSION,  // Print version of program and exit.
  *
- ** @return 0 on success,
-            positive number otherwise.
+ * @return 0 on success,
+            1 key was not found,
+            3 arguments is empty,
+            6 type is empty.
  */
 int argparser_add_action_to_arg(argparser *parser, char *name_or_flag,
                                 argparser_arg_action action);
@@ -196,7 +204,10 @@ int argparser_add_action_to_arg(argparser *parser, char *name_or_flag,
  *                     'long_name' are defined.
  * @param type argparser_arg_type that determines what type to convert to.
  *
- * @return 0 on success, positive number otherwise.
+ * @return 0 on success,
+            1 key was not found,
+            3 arguments is empty,
+            6 type is empty.
  */
 int argparser_add_type_to_arg(argparser *parser, char *name_or_flag,
                               argparser_arg_type type);
@@ -211,7 +222,11 @@ int argparser_add_type_to_arg(argparser *parser, char *name_or_flag,
  *                     'long_name' are defined.
  * @param help Text that describes the argument.
  *
- * @return 0 on success, positive number otherwise.
+ * @return 0 on success,
+            1 key was not found,
+            3 arguments is empty,
+            6 type is empty.
+ *
  */
 int argparser_add_help_to_arg(argparser *parser, char *name_or_flag,
                               char *help);
@@ -225,11 +240,15 @@ int argparser_add_help_to_arg(argparser *parser, char *name_or_flag,
  *                     is NULL, and use 'long_name' if both 'short_name' and
  *                     'long_name' are defined.
  * @param required indicates whether the argument is required.
+ *                 valid values are 'AP_TRUE' and 'AP_FALSE'
  *
- * @return 0 on success, positive number otherwise.
+ * @return 0 on success,
+            1 key was not found,
+            3 arguments is empty,
+            6 invalid required value
  */
 int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
-                                  bool required);
+                                  char required);
 
 /**
  * Add deprecated parameter to parser argument.
@@ -240,8 +259,12 @@ int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
  *                     is NULL, and use 'long_name' if both 'short_name' and
  *                     'long_name' are defined.
  * @param deprecated indicates the argument is deprecated in the help message.
+ *                   valid values are 'AP_TRUE' and 'AP_FALSE'
  *
- * @return 0 on success, positive number otherwise.
+ * @return 0 on success,
+           1 key was not found,
+           3 arguments is empty,
+           6 invalid deprecated value
  */
 int argparser_add_deprecated_to_arg(argparser *parser, char *name_or_flag,
                                     char deprecated);
@@ -256,7 +279,9 @@ int argparser_add_deprecated_to_arg(argparser *parser, char *name_or_flag,
  *                     'long_name' are defined.
  * @param dest Custom name to appear on help message.
  *
- * @return 0 on success, positive number otherwise.
+ * @return 0 on success,
+            1 key was not found,
+            3 arguments is empty,
  */
 int argparser_add_dest_to_arg(argparser *parser, char *name_or_flag,
                               char *dest);
@@ -274,7 +299,10 @@ int argparser_add_dest_to_arg(argparser *parser, char *name_or_flag,
  *                 '+' one or more values to store in array.
  *                 '*' zero of more values to stor in array.
  *
- * @return 0 on success, positive number otherwise.
+ * @return 0 on success,
+            1 key was not found,
+            3 arguments is empty,
+            6 type is empty.
  */
 int argparser_add_nargs_to_arg(argparser *parser, char *name_or_flag,
                                char *nargs);
@@ -289,7 +317,10 @@ int argparser_add_nargs_to_arg(argparser *parser, char *name_or_flag,
  *                     'long_name' are defined.
  * @param metavar Change input value name used in the hlep message.
  *
- * @return 0 on success, positive number otherwise.
+ * @return 0 on success,
+            1 key was not found,
+            3 arguments is empty,
+            6 type is empty.
  */
 int argparser_add_metavar_to_arg(argparser *parser, char *name_or_flag,
                                  char *metavar);
@@ -304,7 +335,10 @@ int argparser_add_metavar_to_arg(argparser *parser, char *name_or_flag,
  *                     'long_name' are defined.
  * @param default_value Value for argument.
  *
- * @return 0 on success, positive number otherwise.
+ * @return 0 on success,
+            1 key was not found,
+            3 arguments is empty,
+            6 type is empty.
  */
 int argparser_add_default_value_to_arg(argparser *parser, char *name_or_flag,
                                        char *default_value);
@@ -319,7 +353,10 @@ int argparser_add_default_value_to_arg(argparser *parser, char *name_or_flag,
  *                     'long_name' are defined.
  * @param const_value Value for argument.
  *
- * @return 0 on success, positive number otherwise.
+ * @return 0 on success,
+            1 key was not found,
+            3 arguments is empty,
+            6 type is empty.
  */
 int argparser_add_const_value_to_arg(argparser *parser, char *name_or_flag,
                                      char *const_value);
@@ -334,7 +371,11 @@ int argparser_add_const_value_to_arg(argparser *parser, char *name_or_flag,
  *                     'long_name' are defined.
  * @param choices Valid options for argument.
  *
- * @return 0 on success, positive number otherwise.
+ ** @return 0 on success, 1 otherwise
+ * @return 0 on success,
+            1 key was not found,
+            3 arguments is empty,
+            6 type is empty.
  */
 int argparser_add_choices_to_arg(argparser *parser, char *name_or_flag,
                                  char *choices);

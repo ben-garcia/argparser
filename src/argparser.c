@@ -56,7 +56,7 @@ typedef struct argparser_argument {
   char *choices;        // Comma seperated string of acceptable arg values.
   char *const_value;    // Values not consumed by command line but required for
   char *default_value;  // Value to be used if arg is not present.
-  bool deprecated;      // Indicates the argument is deprecated.
+  char deprecated;      // Indicates the argument is deprecated.
   char *dest;           // Set a custom name. Overrides long_name.
   char *help;           // Brief description of the argument.
   char *long_name;      // indicates whether arg is positional or optional(--).
@@ -67,7 +67,7 @@ typedef struct argparser_argument {
                      // '*' zero of more values to stor in array.
                      // if omitted, args consumed depends on action.
                      // Various actions('store_const', 'append_const').
-  bool required;     // Used to make option args required.
+  char required;     // Used to make option args required.
   char *short_name;  // '-' + letter indicating optional argument.
   argparser_arg_type type;  // Type to convert to from string.
   // char *version;  // version of the program.
@@ -88,8 +88,8 @@ struct argparser {
   char *description;      // Text to display before argument help message.
   char *epilogue;         // text to display after argument help message
   char *prefix_chars;     // Chars that prefix optional arguments('-')
-  bool add_help;          // Add -h/--help option to the parser.
-  bool allow_abbrev;      // Allow abbreviations of long args name.
+  char add_help;          // Add -h/--help option to the parser.
+  char allow_abbrev;      // Allow abbreviations of long args name.
 };
 
 /**
@@ -110,19 +110,19 @@ static int arg_create(argparser_argument **arg, char short_name[2],
   }
 
   // TODO: malloc here
-  (*arg)->action = AP_ARG_ACTION_STORE;
+  (*arg)->action = AP_ARG_STORE;
   (*arg)->choices = NULL;
   (*arg)->const_value = NULL;
   (*arg)->default_value = NULL;
-  (*arg)->deprecated = false;
+  (*arg)->deprecated = AP_FALSE;
   (*arg)->dest = NULL;
   (*arg)->help = NULL;
   (*arg)->long_name = long_name;
   (*arg)->metavar = NULL;
   (*arg)->nargs = NULL;
-  (*arg)->required = false;
+  (*arg)->required = AP_FALSE;
   (*arg)->short_name = short_name;
-  (*arg)->type = AP_ARG_TYPE_STRING;
+  (*arg)->type = AP_ARG_STRING;
 
 defer:
   return result;
@@ -181,7 +181,8 @@ static int determine_argument(char short_name[2], char *long_name) {
     return 3;
   } else if (short_name[0] == '-' && isalpha(short_name[1]) &&
              long_name[0] != '-' && strncmp(long_name, "--", 2) != 0) {
-    LOG_ERROR("cannot mix positional and optional args (%s:%s)", short_name, long_name);
+    LOG_ERROR("cannot mix positional and optional args (%s:%s)", short_name,
+              long_name);
     return -5;
   }
   LOG_ERROR("UNKNOWN arg error (%s:%s)", short_name, long_name);
@@ -221,8 +222,8 @@ int argparser_create(argparser **parser) {
   (*parser)->description = NULL;
   (*parser)->epilogue = NULL;
   (*parser)->prefix_chars = NULL;
-  (*parser)->add_help = true;
-  (*parser)->allow_abbrev = true;
+  (*parser)->add_help = AP_TRUE;
+  (*parser)->allow_abbrev = AP_TRUE;
 
 defer:
   return result;
@@ -274,12 +275,29 @@ defer:
   return result;
 }
 
-void argparser_add_help_to_argparser(argparser **parser, bool add_help) {
+int argparser_add_help_to_argparser(argparser **parser, char add_help) {
+  int result = STATUS_SUCCESS;
+
+  if (add_help != 48 && add_help != 49) {
+    RETURN_DEFER(STATUS_FAILURE);
+  }
+
   (*parser)->add_help = add_help;
+
+defer:
+  return result;
 }
 
-void argparser_add_abbrev_to_argparser(argparser **parser, bool allow_abbrev) {
+int argparser_add_abbrev_to_argparser(argparser **parser, char allow_abbrev) {
+  int result = STATUS_SUCCESS;
+
+  if (allow_abbrev != 48 && allow_abbrev != 49) {
+    RETURN_DEFER(STATUS_FAILURE);
+  }
+
   (*parser)->allow_abbrev = allow_abbrev;
+defer:
+  return result;
 }
 
 int argparser_add_argument(argparser *parser, char short_name[2],
@@ -356,11 +374,44 @@ int argparser_add_action_to_arg(argparser *parser, char *name_or_flag,
                                 argparser_arg_action action) {
   int result = STATUS_SUCCESS;
   argparser_argument *arg = NULL;
+  argparser_arg_action action_value;
 
   GET_ARG_FROM_PARSER(parser->arguments, name_or_flag, arg);
 
   // TODO: malloc here
-  arg->action = action;
+
+  switch (action) {
+    case AP_ARG_STORE:
+      action_value = AP_ARG_STORE;
+      break;
+    case AP_ARG_STORE_CONST:
+      action_value = AP_ARG_STORE_CONST;
+      break;
+    case AP_ARG_STORE_TRUE:
+      action_value = AP_ARG_STORE_TRUE;
+      break;
+    case AP_ARG_STORE_FALSE:
+      action_value = AP_ARG_STORE_FALSE;
+      break;
+    case AP_ARG_STORE_APPEND:
+      action_value = AP_ARG_STORE_APPEND;
+      break;
+    case AP_ARG_STORE_APPEND_CONST:
+      action_value = AP_ARG_STORE_APPEND_CONST;
+      break;
+    case AP_ARG_STORE_EXTEND:
+      action_value = AP_ARG_STORE_EXTEND;
+      break;
+    case AP_ARG_STORE_COUNT:
+      action_value = AP_ARG_STORE_COUNT;
+      break;
+    case AP_ARG_STORE_VERSION:
+      action_value = AP_ARG_STORE_VERSION;
+      break;
+    default:
+      RETURN_DEFER(STATUS_FAILURE);
+  }
+  arg->action = action_value;
 
 defer:
   return result;
@@ -370,11 +421,29 @@ int argparser_add_type_to_arg(argparser *parser, char *name_or_flag,
                               argparser_arg_type type) {
   int result = STATUS_SUCCESS;
   argparser_argument *arg = NULL;
+  argparser_arg_type type_value;
 
   GET_ARG_FROM_PARSER(parser->arguments, name_or_flag, arg);
 
+  switch (type) {
+    case AP_ARG_FLOAT:
+      type_value = AP_ARG_FLOAT;
+      break;
+    case AP_ARG_INT:
+      type_value = AP_ARG_INT;
+      break;
+    case AP_ARG_STRING:
+      type_value = AP_ARG_STRING;
+      break;
+    case AP_ARG_BOOL:
+      type_value = AP_ARG_BOOL;
+      break;
+    default:
+      RETURN_DEFER(STATUS_FAILURE);
+  }
+
   // TODO: malloc here
-  arg->type = type;
+  arg->type = type_value;
 
 defer:
   return result;
@@ -395,9 +464,13 @@ defer:
 }
 
 int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
-                                  bool required) {
+                                  char required) {
   int result = STATUS_SUCCESS;
   argparser_argument *arg = NULL;
+
+  if (required != 48 && required != 49) {
+    RETURN_DEFER(6);
+  }
 
   GET_ARG_FROM_PARSER(parser->arguments, name_or_flag, arg);
 
@@ -412,6 +485,10 @@ int argparser_add_deprecated_to_arg(argparser *parser, char *name_or_flag,
                                     char deprecated) {
   int result = STATUS_SUCCESS;
   argparser_argument *arg = NULL;
+
+  if (deprecated != 48 && deprecated != 49) {
+    RETURN_DEFER(6);
+  }
 
   GET_ARG_FROM_PARSER(parser->arguments, name_or_flag, arg);
 
