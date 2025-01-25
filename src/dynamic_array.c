@@ -190,7 +190,7 @@ defer:
 }
 
 int dynamic_array_get_size(dynamic_array *array) {
-  if (array != NULL) {
+  if (array == NULL) {
     return -1;
   }
   return array->size;
