@@ -114,13 +114,13 @@ static int arg_create(argparser_argument **arg, char short_name[2],
   (*arg)->choices = NULL;
   (*arg)->const_value = NULL;
   (*arg)->default_value = NULL;
-  (*arg)->deprecated = AP_FALSE;
+  (*arg)->deprecated = false;
   (*arg)->dest = NULL;
   (*arg)->help = NULL;
   (*arg)->long_name = long_name;
   (*arg)->metavar = NULL;
   (*arg)->nargs = NULL;
-  (*arg)->required = AP_FALSE;
+  (*arg)->required = false;
   (*arg)->short_name = short_name;
   (*arg)->type = AP_ARG_STRING;
 
@@ -222,8 +222,8 @@ int argparser_create(argparser **parser) {
   (*parser)->description = NULL;
   (*parser)->epilogue = NULL;
   (*parser)->prefix_chars = NULL;
-  (*parser)->add_help = AP_TRUE;
-  (*parser)->allow_abbrev = AP_TRUE;
+  (*parser)->add_help = true;
+  (*parser)->allow_abbrev = true;
 
 defer:
   return result;
@@ -275,10 +275,10 @@ defer:
   return result;
 }
 
-int argparser_add_help_to_argparser(argparser **parser, char add_help) {
+int argparser_add_help_to_argparser(argparser **parser, bool add_help) {
   int result = STATUS_SUCCESS;
 
-  if (add_help != 48 && add_help != 49) {
+  if (add_help != 0 && add_help != 1) {
     RETURN_DEFER(STATUS_FAILURE);
   }
 
@@ -288,10 +288,10 @@ defer:
   return result;
 }
 
-int argparser_add_abbrev_to_argparser(argparser **parser, char allow_abbrev) {
+int argparser_add_abbrev_to_argparser(argparser **parser, bool allow_abbrev) {
   int result = STATUS_SUCCESS;
 
-  if (allow_abbrev != 48 && allow_abbrev != 49) {
+  if (allow_abbrev != 0 && allow_abbrev != 1) {
     RETURN_DEFER(STATUS_FAILURE);
   }
 
@@ -464,11 +464,11 @@ defer:
 }
 
 int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
-                                  char required) {
+                                  bool required) {
   int result = STATUS_SUCCESS;
   argparser_argument *arg = NULL;
 
-  if (required != 48 && required != 49) {
+  if (required != 0 && required != 1) {
     RETURN_DEFER(6);
   }
 
@@ -482,11 +482,11 @@ defer:
 }
 
 int argparser_add_deprecated_to_arg(argparser *parser, char *name_or_flag,
-                                    char deprecated) {
+                                    bool deprecated) {
   int result = STATUS_SUCCESS;
   argparser_argument *arg = NULL;
 
-  if (deprecated != 48 && deprecated != 49) {
+  if (deprecated != 0 && deprecated != 1) {
     RETURN_DEFER(6);
   }
 
@@ -583,14 +583,17 @@ defer:
   return result;
 }
 
-// int argpaser_parse_args(argparser *parser, int argc, char *argv[]) {
-//   int result = STATUS_SUCCESS;
-//
-//   RETURN_DEFER(STATUS_SUCCESS);
-//
-// defer:
-//   return result;
-// }
+int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
+  int result = STATUS_SUCCESS;
+
+  LOG_DEBUG("parser->arguments: %i\n", hash_table_get_size(parser->arguments));
+  for (int i = 0; i < argc; i++) {
+    LOG_DEBUG("arg at index %i is %s", i, argv[i]);
+  }
+
+  // defer:
+  return result;
+}
 
 void argparser_destroy(argparser **parser) {
   if (*parser != NULL) {

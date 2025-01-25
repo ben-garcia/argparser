@@ -1,8 +1,7 @@
 #ifndef ARGPARSER_H
 #define ARGPARSER_H
 
-#define AP_FALSE 48
-#define AP_TRUE 49
+#include <stdbool.h>
 
 // Optional single input value.
 #define AP_ARG_OPTIONAL "?"
@@ -126,7 +125,7 @@ int argparser_add_prechars_to_argparser(argparser **parser, char *prefix_chars);
  *
  * @return 0 on success, 1 indicates invalid 'allow_abbrev' value.
  */
-int argparser_add_help_to_argparser(argparser **parser, char help);
+int argparser_add_help_to_argparser(argparser **parser, bool help);
 
 /**
  * Add allow abbrev to argparser.
@@ -137,7 +136,7 @@ int argparser_add_help_to_argparser(argparser **parser, char help);
  *
  * @return 0 on success, 1 indicates invalid 'allow_abbrev' value.
  */
-int argparser_add_abbrev_to_argparser(argparser **parser, char allow_abbrev);
+int argparser_add_abbrev_to_argparser(argparser **parser, bool allow_abbrev);
 
 /**
  * Add argument to the parser.
@@ -248,7 +247,7 @@ int argparser_add_help_to_arg(argparser *parser, char *name_or_flag,
             6 invalid required value
  */
 int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
-                                  char required);
+                                  bool required);
 
 /**
  * Add deprecated parameter to parser argument.
@@ -267,7 +266,7 @@ int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
            6 invalid deprecated value
  */
 int argparser_add_deprecated_to_arg(argparser *parser, char *name_or_flag,
-                                    char deprecated);
+                                    bool deprecated);
 
 /**
  * Add dest parameter to parser argument.
@@ -389,7 +388,7 @@ int argparser_add_choices_to_arg(argparser *parser, char *name_or_flag,
  *
  * @return 0 on success, positive number otherwise.
  */
-int argpaser_parse_args(argparser *parser, int argc, char *argv[]);
+int argparser_parse_args(argparser *parser, int argc, char *argv[]);
 /**
  * Deallocate and set to NULL.
  *

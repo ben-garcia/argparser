@@ -11,8 +11,7 @@
 #define ARG_LONG_HELP "--help"
 #define ARG_LONG_VERSION "version"
 
-// int main(int argc, char *argv[]) {
-int main() {
+int main(int argc, char *argv[]) {
   int result = STATUS_SUCCESS;
   argparser *parser = NULL;
   hash_table *ht = NULL;
@@ -29,15 +28,15 @@ int main() {
   argparser_add_desc_to_argparser(&parser, "best description");
   argparser_add_epilogue_to_argparser(&parser, "best epilogue");
   argparser_add_prechars_to_argparser(&parser, "-+");
-  argparser_add_help_to_argparser(&parser, AP_FALSE);
-  argparser_add_abbrev_to_argparser(&parser, AP_FALSE);
+  argparser_add_help_to_argparser(&parser, false);
+  argparser_add_abbrev_to_argparser(&parser, false);
 
   argparser_add_argument(parser, NULL, ARG_LONG_FORCE);  // valid
   argparser_add_action_to_arg(parser, ARG_LONG_FORCE, AP_ARG_STORE_CONST);
   argparser_add_type_to_arg(parser, ARG_LONG_FORCE, AP_ARG_INT);
   argparser_add_help_to_arg(parser, ARG_LONG_FORCE, "This is the help message");
-  argparser_add_required_to_arg(parser, ARG_LONG_FORCE, AP_FALSE);
-  argparser_add_deprecated_to_arg(parser, ARG_LONG_FORCE, AP_TRUE);
+  argparser_add_required_to_arg(parser, ARG_LONG_FORCE, false);
+  argparser_add_deprecated_to_arg(parser, ARG_LONG_FORCE, true);
   argparser_add_dest_to_arg(parser, ARG_LONG_FORCE, "FORCE");
   argparser_add_nargs_to_arg(parser, ARG_LONG_FORCE, "2");
   argparser_add_metavar_to_arg(parser, ARG_LONG_FORCE, "H");
@@ -56,6 +55,10 @@ int main() {
   argparser_add_argument(parser, "-t", "terminate");  // not valid
   argparser_add_argument(parser, "-ww", "www");       // not valid
   argparser_add_argument(parser, "!E", "--extra");    // not valid
+
+  if ((argparser_parse_args(parser, argc, argv)) != 0) {
+    RETURN_DEFER(STATUS_FAILURE); 
+  }
 
   printf("***************************************\n");
   printf("*******TESTING INT**********************\n");

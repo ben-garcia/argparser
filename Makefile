@@ -27,12 +27,12 @@ all: $(BUILDDIR)/$(BINARY)
 # | represents order-only prerequisite. Those that are to the right of |
 #   target can be out of date. 
 $(BUILDDIR)/$(BINARY): $(OBJECTS) | $(BUILDDIR)
-	@echo "(Linking) $@"
+	@echo "Linking -> $@"
 	@$(CC) $(CFLAGS) -o $@ $^
 
 # $< represents the first prerequisite of a rule $(CODEDIR)/%.c
 $(BUILDDIR)/%.o: $(CODEDIR)/%.c $(HFILES) | $(BUILDDIR)
-	@echo "(Compiling) $<"
+	@echo "Compiling -> $<"
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -c -o $@ $<
 
