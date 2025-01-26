@@ -7,6 +7,7 @@
 
 #include "dynamic_array.h"
 #include "hash_table.h"
+#include "string_builder.h"
 #include "utils.h"
 
 /**
@@ -82,14 +83,18 @@ typedef struct argparser_argument {
 } argparser_argument;
 
 struct argparser {
-  hash_table *arguments;  // Entries of argparser_argument.
-  char *name;             // Program name(default is argv[0])
-  char *usage;            // Describing program usage.
-  char *description;      // Text to display before argument help message.
-  char *epilogue;         // text to display after argument help message
-  char *prefix_chars;     // Chars that prefix optional arguments('-')
-  char add_help;          // Add -h/--help option to the parser.
-  char allow_abbrev;      // Allow abbreviations of long args name.
+  hash_table *arguments;            // Entries of argparser_argument.
+  string_builder *positional_args;  // Concatenated string of all positional
+                                    // argument names.
+  string_builder *optional_args;    // Concatenated string of all optional
+                                    // argument short names.
+  char *name;                       // Program name(default is argv[0])
+  char *usage;                      // Describing program usage.
+  char *description;   // Text to display before argument help message.
+  char *epilogue;      // text to display after argument help message
+  char *prefix_chars;  // Chars that prefix optional arguments('-')
+  char add_help;       // Add -h/--help option to the parser.
+  char allow_abbrev;   // Allow abbreviations of long args name.
 };
 
 /**
@@ -203,6 +208,45 @@ static int determine_argument(char short_name[2], char *long_name) {
   // }
 }
 
+/**
+ * Concatinate command line arguments into a string.
+ *
+ * @param argc argument count.
+ * @param argv all command line arguments passed in.
+ * @param str buffer used to store the final string.
+ *
+ * @return 0 on success,
+ *         1 indicates failure to build.
+ *         2 indicates memory allocation failed, str set to NULL.
+ */
+static int concat_argv(int argc, char *argv[], char **str) {
+  int result = STATUS_SUCCESS;
+  string_builder *sb;
+
+  if ((string_builder_create(&sb)) != 0) {
+    *str = NULL;
+    RETURN_DEFER(STATUS_MEMORY_FAILURE);
+  }
+
+  for (int i = 1; i < argc; i++) {
+    if ((string_builder_append(sb, argv[i], strlen(argv[i]))) != 0) {
+      RETURN_DEFER(STATUS_FAILURE);
+    }
+    if (i != argc - 1) {
+      // Add space after each arg except the last one.
+      string_builder_append_char(sb, ' ');
+    }
+  }
+
+  result = string_builder_build(sb, str);
+
+defer:
+  if (sb != NULL) {
+    string_builder_destroy(&sb);
+  }
+  return result;
+}
+
 int argparser_create(argparser **parser) {
   int result = STATUS_SUCCESS;
 
@@ -211,10 +255,18 @@ int argparser_create(argparser **parser) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
-  result = hash_table_create(&(*parser)->arguments, sizeof(argparser_argument),
-                             NULL, arg_destroy);
-  if (result == 2) {
-    RETURN_DEFER(STATUS_MEMORY_FAILURE);
+  if ((result =
+           hash_table_create(&(*parser)->arguments, sizeof(argparser_argument),
+                             NULL, arg_destroy)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  if ((result = string_builder_create(&(*parser)->positional_args)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  if ((result = string_builder_create(&(*parser)->optional_args)) != 0) {
+    RETURN_DEFER(result);
   }
 
   (*parser)->name = NULL;
@@ -300,6 +352,7 @@ defer:
   return result;
 }
 
+
 int argparser_add_argument(argparser *parser, char short_name[2],
                            char *long_name) {
   int result = STATUS_SUCCESS;
@@ -315,6 +368,9 @@ int argparser_add_argument(argparser *parser, char short_name[2],
   arg_kind = determine_argument(short_name, long_name);
   if (arg_kind == 1) {
     // Positional argument
+    string_builder_append(parser->positional_args, long_name,
+                          strlen(long_name));
+    string_builder_append_char(parser->positional_args, ' ');
 
     search_result = hash_table_search(parser->arguments, long_name, &value);
     if (search_result == 0 && (value == NULL || value != NULL)) {
@@ -331,6 +387,7 @@ int argparser_add_argument(argparser *parser, char short_name[2],
     hash_table_insert(parser->arguments, long_name, arg);
   } else if (arg_kind == 2) {
     // Optional argument with short_name as key.
+    string_builder_append_char(parser->optional_args, short_name[1]);
 
     search_result = hash_table_search(parser->arguments, short_name, &value);
     if (search_result == 0 && (value == NULL || value != NULL)) {
@@ -347,6 +404,9 @@ int argparser_add_argument(argparser *parser, char short_name[2],
     hash_table_insert(parser->arguments, short_name, arg);
   } else if (arg_kind == 3) {
     // Optional argument with long_name as key.
+    if (short_name) {
+      string_builder_append_char(parser->optional_args, short_name[1]);
+    }
 
     search_result = hash_table_search(parser->arguments, long_name, &value);
     if (search_result == 0 && (value == NULL || value != NULL)) {
@@ -583,21 +643,30 @@ defer:
   return result;
 }
 
+
 int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   int result = STATUS_SUCCESS;
+  char *args_string = NULL;
 
-  LOG_DEBUG("parser->arguments: %i\n", hash_table_get_size(parser->arguments));
-  for (int i = 0; i < argc; i++) {
-    LOG_DEBUG("arg at index %i is %s", i, argv[i]);
+  if ((result = concat_argv(argc, argv, &args_string)) != 0) {
+    RETURN_DEFER(result);
   }
 
-  // defer:
+  LOG_DEBUG("parser size: %i", hash_table_get_size(parser->arguments));
+
+defer:
+  if (args_string != NULL) {
+    FREE(args_string);
+  }
   return result;
 }
 
 void argparser_destroy(argparser **parser) {
   if (*parser != NULL) {
     hash_table_destroy(&(*parser)->arguments);
+    string_builder_destroy(&(*parser)->positional_args);
+    string_builder_destroy(&(*parser)->optional_args);
+
     FREE(*parser);
     *parser = NULL;
   }

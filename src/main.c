@@ -5,11 +5,13 @@
 #include "hash_table.h"
 #include "utils.h"
 
-#define ARG_LONG_FORCE "--force"
 #define ARG_SHORT_HELP "-h"
-#define ARG_SHORT_APPEND "-A"
 #define ARG_LONG_HELP "--help"
-#define ARG_LONG_VERSION "version"
+#define ARG_LONG_FORCE "--force"
+#define ARG_SHORT_APPEND "-A"
+#define ARG_LONG_SEND "send"
+#define ARG_SHORT_COPY "-c"
+#define ARG_LONG_COPY "--copy"
 
 int main(int argc, char *argv[]) {
   int result = STATUS_SUCCESS;
@@ -45,8 +47,9 @@ int main(int argc, char *argv[]) {
   argparser_add_choices_to_arg(parser, ARG_LONG_FORCE, "0,1");
 
   argparser_add_argument(parser, ARG_SHORT_HELP, ARG_LONG_HELP);  // valid
-  argparser_add_argument(parser, NULL, ARG_LONG_VERSION);         // valid
+  argparser_add_argument(parser, NULL, ARG_LONG_SEND);            // valid
   argparser_add_argument(parser, ARG_SHORT_APPEND, NULL);         // valid
+  argparser_add_argument(parser, ARG_SHORT_COPY, ARG_LONG_COPY);  // valid
 
   argparser_add_argument(parser, NULL, NULL);         // not valid
   argparser_add_argument(parser, NULL, "--force");    // not valid
@@ -56,8 +59,12 @@ int main(int argc, char *argv[]) {
   argparser_add_argument(parser, "-ww", "www");       // not valid
   argparser_add_argument(parser, "!E", "--extra");    // not valid
 
+  argparser_add_argument(parser, "-E", "--extend");  // valid
+  argparser_add_argument(parser, "-Z", NULL);        // valid
+  argparser_add_argument(parser, "-B", NULL);        // valid
+
   if ((argparser_parse_args(parser, argc, argv)) != 0) {
-    RETURN_DEFER(STATUS_FAILURE); 
+    RETURN_DEFER(STATUS_FAILURE);
   }
 
   printf("***************************************\n");
