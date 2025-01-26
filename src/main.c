@@ -8,7 +8,8 @@
 #define ARG_LONG_HELP "--help"
 #define ARG_LONG_FORCE "--force"
 #define ARG_SHORT_APPEND "-A"
-#define ARG_LONG_SEND "send"
+#define ARG_POS_SRC "src"
+#define ARG_POS_DEST "dest"
 #define ARG_SHORT_COPY "-c"
 #define ARG_LONG_COPY "--copy"
 
@@ -39,7 +40,8 @@ int main(int argc, char *argv[]) {
   argparser_add_choices_to_arg(parser, ARG_LONG_FORCE, "0,1");
 
   argparser_add_argument(parser, ARG_SHORT_HELP, ARG_LONG_HELP);  // valid
-  argparser_add_argument(parser, NULL, ARG_LONG_SEND);            // valid
+  argparser_add_argument(parser, NULL, ARG_POS_SRC);              // valid
+  argparser_add_argument(parser, NULL, ARG_POS_DEST);             // valid
   argparser_add_argument(parser, ARG_SHORT_APPEND, NULL);         // valid
   argparser_add_argument(parser, ARG_SHORT_COPY, ARG_LONG_COPY);  // valid
 

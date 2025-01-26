@@ -159,7 +159,7 @@ static void arg_destroy(void **arg) {
  */
 static int determine_argument(char short_name[2], char *long_name) {
   if (short_name == NULL && long_name == NULL) {
-    LOG_ERROR("both are NULL (%s:%s)", short_name, long_name);
+    // LOG_ERROR("both are NULL (%s:%s)", short_name, long_name);
     return -1;
   } else if (short_name == NULL && (strncmp(long_name, "--", 2) != 0) &&
              long_name[0] != '-') {
@@ -168,15 +168,16 @@ static int determine_argument(char short_name[2], char *long_name) {
   } else if (short_name == NULL && (strncmp(long_name, "--", 2) == 0)) {
     return 3;
   } else if (short_name == NULL && long_name[0] == '-') {
-    LOG_ERROR("positional arg cannot begin with dash (-) (%s:%s)", short_name,
-              long_name);
+    // LOG_ERROR("positional arg cannot begin with dash (-) (%s:%s)",
+    // short_name,
+    //          long_name);
     return -4;
   }
 
   int short_length = strlen(short_name);
 
   if (short_length != 2 || short_name[0] != '-' || !isalpha(short_name[1])) {
-    LOG_ERROR("invalid optional arg(%s:%s)", short_name, long_name);
+    // LOG_ERROR("invalid optional arg(%s:%s)", short_name, long_name);
     return -2;
   } else if (short_length == 2 && long_name == NULL) {
     // For optional argument with short_name as key.
@@ -186,8 +187,8 @@ static int determine_argument(char short_name[2], char *long_name) {
     return 3;
   } else if (short_name[0] == '-' && isalpha(short_name[1]) &&
              long_name[0] != '-' && strncmp(long_name, "--", 2) != 0) {
-    LOG_ERROR("cannot mix positional and optional args (%s:%s)", short_name,
-              long_name);
+    /// LOG_ERROR("cannot mix positional and optional args (%s:%s)", short_name,
+    //              long_name);
     return -5;
   }
   LOG_ERROR("UNKNOWN arg error (%s:%s)", short_name, long_name);
@@ -351,7 +352,6 @@ int argparser_add_abbrev_to_argparser(argparser **parser, bool allow_abbrev) {
 defer:
   return result;
 }
-
 
 int argparser_add_argument(argparser *parser, char short_name[2],
                            char *long_name) {
@@ -643,17 +643,16 @@ defer:
   return result;
 }
 
-
 int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   int result = STATUS_SUCCESS;
   char *args_string = NULL;
 
   if ((result = concat_argv(argc, argv, &args_string)) != 0) {
-
     RETURN_DEFER(result);
   }
 
-  LOG_DEBUG("parser size: %i", hash_table_get_size(parser->arguments));
+  LOG_DEBUG("args_string: %s", args_string);
+  LOG_DEBUG("args size: %i", hash_table_get_size(parser->arguments));
 
 defer:
   if (args_string != NULL) {
