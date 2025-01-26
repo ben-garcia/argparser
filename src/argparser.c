@@ -649,6 +649,7 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   char *args_string = NULL;
 
   if ((result = concat_argv(argc, argv, &args_string)) != 0) {
+
     RETURN_DEFER(result);
   }
 
