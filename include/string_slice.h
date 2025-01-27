@@ -15,6 +15,15 @@ typedef struct string_slice string_slice;
 int string_slice_create(string_slice **ss, char *str, unsigned int length);
 
 /**
+ * Increment the length of the string slice. 
+ *
+ * @param ss string_slice to create.
+ *
+ * @return 0 on success, 5 ss is NULL. 
+ */
+int string_slice_advance(string_slice **ss);
+
+/**
  * Seperate string into different regions determined by a delimioter.
  *
  * @param ss string_slice to modify.

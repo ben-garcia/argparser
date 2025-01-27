@@ -8,6 +8,7 @@
 #include "dynamic_array.h"
 #include "hash_table.h"
 #include "string_builder.h"
+#include "string_slice.h"
 #include "utils.h"
 
 /**
@@ -387,7 +388,13 @@ int argparser_add_argument(argparser *parser, char short_name[2],
     hash_table_insert(parser->arguments, long_name, arg);
   } else if (arg_kind == 2) {
     // Optional argument with short_name as key.
-    string_builder_append_char(parser->optional_args, short_name[1]);
+    string_builder_append(parser->optional_args, short_name, 2);
+    if (long_name) {
+      string_builder_append_char(parser->optional_args, ',');
+      string_builder_append(parser->optional_args, long_name,
+                            strlen(long_name));
+    }
+    string_builder_append_char(parser->optional_args, ' ');
 
     search_result = hash_table_search(parser->arguments, short_name, &value);
     if (search_result == 0 && (value == NULL || value != NULL)) {
@@ -405,8 +412,11 @@ int argparser_add_argument(argparser *parser, char short_name[2],
   } else if (arg_kind == 3) {
     // Optional argument with long_name as key.
     if (short_name) {
-      string_builder_append_char(parser->optional_args, short_name[1]);
+      string_builder_append(parser->optional_args, short_name, 2);
+      string_builder_append_char(parser->optional_args, ',');
     }
+    string_builder_append(parser->optional_args, long_name, strlen(long_name));
+    string_builder_append_char(parser->optional_args, ' ');
 
     search_result = hash_table_search(parser->arguments, long_name, &value);
     if (search_result == 0 && (value == NULL || value != NULL)) {
@@ -645,19 +655,22 @@ defer:
 
 int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   int result = STATUS_SUCCESS;
-  char *args_string = NULL;
+  char *args_str = NULL;
 
-  if ((result = concat_argv(argc, argv, &args_string)) != 0) {
+  if ((result = concat_argv(argc, argv, &args_str)) != 0) {
     RETURN_DEFER(result);
   }
 
-  LOG_DEBUG("args_string: %s", args_string);
-  LOG_DEBUG("args size: %i", hash_table_get_size(parser->arguments));
+  LOG_DEBUG("args_string: %s", args_str);
+
+  if (hash_table_get_size(parser->arguments)) {
+  }
 
 defer:
-  if (args_string != NULL) {
-    FREE(args_string);
+  if (args_str != NULL) {
+    FREE(args_str);
   }
+
   return result;
 }
 

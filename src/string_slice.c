@@ -21,6 +21,19 @@ defer:
   return result;
 }
 
+int string_slice_advance(string_slice **ss) {
+  int result = STATUS_SUCCESS;
+
+  if (*ss == NULL) {
+    RETURN_DEFER(STATUS_IS_NULL);
+  }
+
+  (*ss)->length++;
+
+defer:
+  return result;
+}
+
 int string_slice_split(string_slice *ss, string_slice *output,
                        const char delimiter) {
   int result = STATUS_SUCCESS;
