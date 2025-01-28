@@ -249,6 +249,117 @@ defer:
   return result;
 }
 
+/**
+ * Seperate optional flag and name arguments.
+ *
+ * Used to more efficiently validate args.
+ *
+ * @param parser argparser
+ * @param opt_flags buffer to store optional flags.
+ * @param opt_names buffer to store optional names.
+ *
+ * @return 0 on success,
+ *         1 indicates failure to build.
+ *         2 indicates memory allocation failed.
+ */
+static int format_opt_args(argparser *parser, char **opt_flags,
+                           char **opt_names) {
+  int result = STATUS_SUCCESS;
+  string_builder *flags = NULL;
+  string_builder *names = NULL;
+  string_builder *name = NULL;
+  char *args = NULL;
+
+  if ((result = string_builder_create(&flags)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  if ((result = string_builder_create(&names)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  if ((result = string_builder_build(parser->optional_args, &args)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  int args_length = strlen(args);
+
+  for (int i = 0; i < args_length; i++) {
+    if (strncmp(args + i, "--", 2) == 0) {
+      i = i + 2;  // skip double dashes
+      while (args[i] != ' ') {
+        i++;
+      }
+      continue;
+    }
+
+    if (args[i] == '-') {
+      if ((string_builder_append_char(flags, args[i + 1])) != 0) {
+        RETURN_DEFER(result);
+      }
+      i = i + 2;
+    }
+  }
+
+  for (int i = 0; i < args_length; i++) {
+    if (strncmp(args + i, "--", 2) == 0) {
+      if ((result = string_builder_create(&name)) != 0) {
+        RETURN_DEFER(result);
+      }
+      char *arg_name = NULL;
+      i = i + 2;  // skip double dashes
+      while (args[i] != ' ') {
+        if ((result = string_builder_append_char(name, args[i])) != 0) {
+          RETURN_DEFER(result);
+        }
+        i++;
+      }
+      if ((result = string_builder_build(name, &arg_name) != 0)) {
+        RETURN_DEFER(result);
+      }
+
+      if ((result = string_builder_append(names, arg_name, strlen(arg_name))) !=
+          0) {
+        RETURN_DEFER(result);
+      }
+
+      if ((result = string_builder_append_char(names, ' ')) != 0) {
+        RETURN_DEFER(result);
+      }
+
+      FREE(arg_name);
+      string_builder_destroy(&name);
+    }
+  }
+
+  if ((string_builder_build(flags, opt_flags)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  if ((string_builder_build(names, opt_names)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+defer:
+  if (flags != NULL) {
+    string_builder_destroy(&flags);
+  }
+
+  if (names != NULL) {
+    string_builder_destroy(&names);
+  }
+
+  if (name != NULL) {
+    string_builder_destroy(&name);
+  }
+
+  if (args != NULL) {
+    FREE(args);
+  }
+
+  return result;
+}
+
 int argparser_create(argparser **parser) {
   int result = STATUS_SUCCESS;
 
@@ -369,9 +480,6 @@ int argparser_add_argument(argparser *parser, char short_name[2],
   arg_kind = determine_argument(short_name, long_name);
   if (arg_kind == 1) {
     // Positional argument
-    string_builder_append(parser->positional_args, long_name,
-                          strlen(long_name));
-    string_builder_append_char(parser->positional_args, ' ');
 
     search_result = hash_table_search(parser->arguments, long_name, &value);
     if (search_result == 0 && (value == NULL || value != NULL)) {
@@ -381,6 +489,10 @@ int argparser_add_argument(argparser *parser, char short_name[2],
       RETURN_DEFER(6);
     }
 
+    string_builder_append(parser->positional_args, long_name,
+                          strlen(long_name));
+    string_builder_append_char(parser->positional_args, ' ');
+
     if ((arg_create(&arg, NULL, long_name) != 0)) {
       RETURN_DEFER(STATUS_MEMORY_FAILURE);
     }
@@ -388,13 +500,6 @@ int argparser_add_argument(argparser *parser, char short_name[2],
     hash_table_insert(parser->arguments, long_name, arg);
   } else if (arg_kind == 2) {
     // Optional argument with short_name as key.
-    string_builder_append(parser->optional_args, short_name, 2);
-    if (long_name) {
-      string_builder_append_char(parser->optional_args, ',');
-      string_builder_append(parser->optional_args, long_name,
-                            strlen(long_name));
-    }
-    string_builder_append_char(parser->optional_args, ' ');
 
     search_result = hash_table_search(parser->arguments, short_name, &value);
     if (search_result == 0 && (value == NULL || value != NULL)) {
@@ -404,6 +509,14 @@ int argparser_add_argument(argparser *parser, char short_name[2],
       RETURN_DEFER(6);
     }
 
+    string_builder_append(parser->optional_args, short_name, 2);
+    if (long_name) {
+      string_builder_append_char(parser->optional_args, ',');
+      string_builder_append(parser->optional_args, long_name,
+                            strlen(long_name));
+    }
+    string_builder_append_char(parser->optional_args, ' ');
+
     if ((arg_create(&arg, short_name, long_name) != 0)) {
       RETURN_DEFER(STATUS_MEMORY_FAILURE);
     }
@@ -411,12 +524,6 @@ int argparser_add_argument(argparser *parser, char short_name[2],
     hash_table_insert(parser->arguments, short_name, arg);
   } else if (arg_kind == 3) {
     // Optional argument with long_name as key.
-    if (short_name) {
-      string_builder_append(parser->optional_args, short_name, 2);
-      string_builder_append_char(parser->optional_args, ',');
-    }
-    string_builder_append(parser->optional_args, long_name, strlen(long_name));
-    string_builder_append_char(parser->optional_args, ' ');
 
     search_result = hash_table_search(parser->arguments, long_name, &value);
     if (search_result == 0 && (value == NULL || value != NULL)) {
@@ -425,6 +532,13 @@ int argparser_add_argument(argparser *parser, char short_name[2],
       // either case exit.
       RETURN_DEFER(6);
     }
+
+    if (short_name) {
+      string_builder_append(parser->optional_args, short_name, 2);
+      string_builder_append_char(parser->optional_args, ',');
+    }
+    string_builder_append(parser->optional_args, long_name, strlen(long_name));
+    string_builder_append_char(parser->optional_args, ' ');
 
     if ((arg_create(&arg, short_name, long_name) != 0)) {
       RETURN_DEFER(STATUS_MEMORY_FAILURE);
@@ -656,10 +770,14 @@ defer:
 int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   int result = STATUS_SUCCESS;
   char *args_str = NULL;
+  char *opt_flags = NULL;
+  char *opt_names = NULL;
 
   if ((result = concat_argv(argc, argv, &args_str)) != 0) {
     RETURN_DEFER(result);
   }
+
+  format_opt_args(parser, &opt_flags, &opt_names);
 
   LOG_DEBUG("args_string: %s", args_str);
 
@@ -667,6 +785,14 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   }
 
 defer:
+  if (opt_flags != NULL) {
+    FREE(opt_flags);
+  }
+
+  if (opt_names != NULL) {
+    FREE(opt_names);
+  }
+
   if (args_str != NULL) {
     FREE(args_str);
   }

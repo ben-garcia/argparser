@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
   argparser_add_argument(parser, ARG_SHORT_COPY, ARG_LONG_COPY);  // valid
 
   argparser_add_argument(parser, NULL, NULL);         // not valid
-  argparser_add_argument(parser, NULL, "--force");    // not valid
+  argparser_add_argument(parser, NULL, "--force");    // not valid (dublicate)
   argparser_add_argument(parser, NULL, "-export");    // not valid
   argparser_add_argument(parser, "n", "name");        // not valid
   argparser_add_argument(parser, "-t", "terminate");  // not valid
@@ -56,6 +56,10 @@ int main(int argc, char *argv[]) {
   argparser_add_argument(parser, "-E", "--extend");  // valid
   argparser_add_argument(parser, "-Z", NULL);        // valid
   argparser_add_argument(parser, "-B", NULL);        // valid
+
+  argparser_add_argument(parser, "-E", "--extend");  // not valid (dublicate)
+  argparser_add_argument(parser, NULL, ARG_POS_SRC);  // not valid (dublicate)
+  argparser_add_argument(parser, "-Z", NULL);        // not valid (dublicate)
 
   if ((argparser_parse_args(parser, argc, argv)) != 0) {
     RETURN_DEFER(STATUS_FAILURE);
