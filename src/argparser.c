@@ -282,26 +282,7 @@ static int format_opt_args(argparser *parser, char **opt_flags,
     RETURN_DEFER(result);
   }
 
-  int args_length = strlen(args);
-
-  for (int i = 0; i < args_length; i++) {
-    if (strncmp(args + i, "--", 2) == 0) {
-      i = i + 2;  // skip double dashes
-      while (args[i] != ' ') {
-        i++;
-      }
-      continue;
-    }
-
-    if (args[i] == '-') {
-      if ((string_builder_append_char(flags, args[i + 1])) != 0) {
-        RETURN_DEFER(result);
-      }
-      i = i + 2;
-    }
-  }
-
-  for (int i = 0; i < args_length; i++) {
+  for (unsigned int i = 0; i < strlen(args); i++) {
     if (strncmp(args + i, "--", 2) == 0) {
       if ((result = string_builder_create(&name)) != 0) {
         RETURN_DEFER(result);
@@ -329,6 +310,15 @@ static int format_opt_args(argparser *parser, char **opt_flags,
 
       FREE(arg_name);
       string_builder_destroy(&name);
+
+      continue;
+    }
+
+    if (args[i] == '-') {
+      if ((string_builder_append_char(flags, args[i + 1])) != 0) {
+        RETURN_DEFER(result);
+      }
+      i = i + 2;
     }
   }
 
