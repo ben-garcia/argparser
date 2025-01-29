@@ -500,10 +500,12 @@ int argparser_add_argument(argparser *parser, char short_name[2],
     }
 
     string_builder_append(parser->optional_args, short_name, 2);
+    string_builder_append_char(parser->optional_args, ',');
     if (long_name) {
-      string_builder_append_char(parser->optional_args, ',');
       string_builder_append(parser->optional_args, long_name,
                             strlen(long_name));
+    } else {
+      string_builder_append(parser->optional_args, "--0", 3);
     }
     string_builder_append_char(parser->optional_args, ' ');
 
@@ -526,7 +528,10 @@ int argparser_add_argument(argparser *parser, char short_name[2],
     if (short_name) {
       string_builder_append(parser->optional_args, short_name, 2);
       string_builder_append_char(parser->optional_args, ',');
+    } else {
+      string_builder_append(parser->optional_args, "-0,", 3);
     }
+
     string_builder_append(parser->optional_args, long_name, strlen(long_name));
     string_builder_append_char(parser->optional_args, ' ');
 
