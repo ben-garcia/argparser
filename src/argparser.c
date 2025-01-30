@@ -48,6 +48,11 @@
     }                                                                  \
   } while (0)
 
+typedef enum arg_kind {
+  ARG_KIND_OPT_FLAG,
+  ARG_KIND_OPT_NAME,
+} arg_kind;
+
 // typedef enum argparser_arg_type {
 //   ARGPARSER_ARG_TYPE_POSITIONAL,  // always required.
 //   ARGPARSER_ARG_TYPE_OPTIONAL,    // optional by default. Can be changed
@@ -129,6 +134,7 @@ static int arg_create(argparser_argument **arg, char short_name[2],
   (*arg)->required = false;
   (*arg)->short_name = short_name;
   (*arg)->type = AP_ARG_STRING;
+  (*arg)->type_value.str_value = NULL;
 
 defer:
   return result;
@@ -137,6 +143,9 @@ defer:
 static void arg_destroy(void **arg) {
   if (*arg != NULL) {
     // TODO: deallocate memory
+    if ((((argparser_argument *)(*arg))->type_value.str_value)) {
+      FREE(((argparser_argument *)(*arg))->type_value.str_value);
+    }
     FREE(*arg);
     *arg = NULL;
   }
@@ -250,101 +259,247 @@ defer:
 }
 
 /**
- * Seperate optional flag and name arguments.
+ * Validate the argument.
  *
- * Used to more efficiently validate args.
+ * @param parg argparser_argument to validate.
+ * @param args_str pointer to the start position of argument.
+ * @param index pointer to the current position of args_str.
  *
- * @param parser argparser
- * @param opt_flags buffer to store optional flags.
- * @param opt_names buffer to store optional names.
- *
- * @return 0 on success,
- *         1 indicates failure to build.
- *         2 indicates memory allocation failed.
+ * @return how much to move forward.
  */
-static int format_opt_args(argparser *parser, char **opt_flags,
-                           char **opt_names) {
-  int result = STATUS_SUCCESS;
-  string_builder *flags = NULL;
-  string_builder *names = NULL;
-  string_builder *name = NULL;
-  char *args = NULL;
+static int validate_argument(argparser_argument *arg, char *args_str,
+                             unsigned short index) {
+  int i = index;
 
-  if ((result = string_builder_create(&flags)) != 0) {
-    RETURN_DEFER(result);
-  }
+  switch (arg->action) {
+    case AP_ARG_STORE:
+    case AP_ARG_STORE_APPEND: {
+      string_builder *value = NULL;
+      string_builder_create(&value);
 
-  if ((result = string_builder_create(&names)) != 0) {
-    RETURN_DEFER(result);
-  }
-
-  if ((result = string_builder_build(parser->optional_args, &args)) != 0) {
-    RETURN_DEFER(result);
-  }
-
-  for (unsigned int i = 0; i < strlen(args); i++) {
-    if (strncmp(args + i, "--", 2) == 0) {
-      if ((result = string_builder_create(&name)) != 0) {
-        RETURN_DEFER(result);
-      }
-      char *arg_name = NULL;
-      i = i + 2;  // skip double dashes
-      while (args[i] != ' ') {
-        if ((result = string_builder_append_char(name, args[i])) != 0) {
-          RETURN_DEFER(result);
-        }
+      if (args_str[i] == ' ') {
+        // Skip whitespace between argument flag and value.
         i++;
       }
-      if ((result = string_builder_build(name, &arg_name) != 0)) {
-        RETURN_DEFER(result);
+
+      while (args_str[i] != ' ') {
+        if (*(args_str + i) == '\0') {
+          break;
+        }
+        //  Construct value string.
+        string_builder_append_char(value, args_str[i++]);
       }
 
-      if ((result = string_builder_append(names, arg_name, strlen(arg_name))) !=
-          0) {
-        RETURN_DEFER(result);
-      }
-
-      if ((result = string_builder_append_char(names, ' ')) != 0) {
-        RETURN_DEFER(result);
-      }
-
-      FREE(arg_name);
-      string_builder_destroy(&name);
-
-      continue;
+      string_builder_build(value, &arg->type_value.str_value);
+      string_builder_destroy(&value);
+      break;
     }
-
-    if (args[i] == '-') {
-      if ((string_builder_append_char(flags, args[i + 1])) != 0) {
-        RETURN_DEFER(result);
-      }
-      i = i + 2;
-    }
+    case AP_ARG_STORE_CONST:
+    case AP_ARG_STORE_APPEND_CONST:
+    case AP_ARG_STORE_EXTEND:
+    case AP_ARG_STORE_COUNT:
+      break;
+    case AP_ARG_STORE_TRUE:
+    case AP_ARG_STORE_FALSE:
+      break;
+    case AP_ARG_STORE_VERSION:
+      break;
   }
 
-  if ((string_builder_build(flags, opt_flags)) != 0) {
-    RETURN_DEFER(result);
+  return i;
+}
+
+/**
+ * Parse the positional argument.
+ *
+ * @param parser argparser
+ * @param args_str pointer to the start position of argument.
+ * @param index pointer to the arguments string.
+ * @param args_num number of positional argument being processed.
+ *
+ * @return how much to move forward.
+ */
+static int parse_positional_argument(argparser *parser, char *args_str,
+                                     unsigned short index,
+                                     unsigned int args_num) {
+  int result = 0;
+  argparser_argument *arg = NULL;
+  string_slice *ss = NULL;
+  string_slice *output = NULL;
+  char *pos_args_str = NULL;
+  char *name = NULL;
+  int new_index = 0;
+
+  string_builder_build(parser->positional_args, &pos_args_str);
+
+  string_slice_create(&ss, pos_args_str, strlen(pos_args_str));
+  string_slice_create(&output, NULL, 0);
+
+  // Remove whitespace at the end.
+  string_slice_trim(ss);
+
+  for (unsigned int i = 0; i < args_num; i++) {
+    string_slice_split(ss, output, ' ');
   }
 
-  if ((string_builder_build(names, opt_names)) != 0) {
-    RETURN_DEFER(result);
+  string_slice_to_string(output, &name);
+  if (name) {
+    hash_table_search(parser->arguments, name, (void **)&arg);
+    new_index = validate_argument(arg, args_str, index);
+    RETURN_DEFER(new_index);
+  }
+
+  if (arg != NULL) {
+    LOG_ERROR("invalid optional argument name");
   }
 
 defer:
-  if (flags != NULL) {
-    string_builder_destroy(&flags);
+  if (ss != NULL) {
+    string_slice_destroy(&ss);
   }
 
-  if (names != NULL) {
-    string_builder_destroy(&names);
+  if (output != NULL) {
+    string_slice_destroy(&output);
+  }
+  if (name != NULL) {
+    FREE(name);
+  }
+
+  if (pos_args_str != NULL) {
+    FREE(pos_args_str);
+  }
+
+  return result;
+}
+
+/**
+ * Parse the optional argument.
+ *
+ * @param parser argparser
+ * @param args_str pointer to the start position of argument.
+ * @param arg_kind type of argument,
+ *                 1 is positional,
+ *                 2 is optional with flag,
+ *                 3 is optional with name.
+ *
+ * @return how much to move forward.
+ */
+static int parse_optional_argument(argparser *parser, char *args_str,
+                                   arg_kind kind, unsigned short index) {
+  int result = 0;
+  string_slice *ss = NULL;
+  string_slice *output = NULL;
+  string_slice *name_slice = NULL;
+  string_slice *flag_slice = NULL;
+  argparser_argument *arg = NULL;
+  char *flag = NULL;
+  char *name = NULL;
+  char *opt_str = NULL;
+  char *opt_args = NULL;
+  int new_index = 0;
+
+  string_builder_build(parser->optional_args, &opt_args);
+
+  string_slice_create(&ss, opt_args, strlen(opt_args));
+  string_slice_create(&output, NULL, 0);
+
+  switch (kind) {
+    case ARG_KIND_OPT_FLAG: {
+      while ((string_slice_split(ss, output, ' ')) == 0) {
+        string_slice_to_string(output, &opt_str);
+        string_slice_create(&name_slice, opt_str, strlen(opt_str));
+        string_slice_create(&flag_slice, NULL, 0);
+        string_slice_split(name_slice, flag_slice, ',');
+        string_slice_to_string(flag_slice, &flag);
+        string_slice_to_string(name_slice, &name);
+
+        if (args_str[index] == flag[1] && name[2] != 0) {
+          // use name as key to access argument.
+          hash_table_search(parser->arguments, name, (void **)&arg);
+
+          new_index = validate_argument(arg, args_str, index + 1);
+
+          RETURN_DEFER(new_index);
+        } else if (args_str[index] == flag[1] && name[2] == 0) {
+          // use flag as key to access argument.
+          hash_table_search(parser->arguments, flag, (void **)&arg);
+
+          new_index = validate_argument(arg, args_str, index + 1);
+
+          RETURN_DEFER(new_index);
+        }
+        string_slice_destroy(&flag_slice);
+        string_slice_destroy(&name_slice);
+        FREE(flag);
+        FREE(name);
+        FREE(opt_str);
+      }
+
+      if (arg != NULL) {
+        LOG_ERROR("invalid optional flag (-%c)", args_str[0]);
+      }
+      break;
+    }
+    case ARG_KIND_OPT_NAME: {
+      while ((string_slice_split(ss, output, ' ')) == 0) {
+        string_slice_to_string(output, &opt_str);
+        string_slice_create(&name_slice, opt_str, strlen(opt_str));
+        string_slice_create(&flag_slice, NULL, 0);
+        string_slice_split(name_slice, flag_slice, ',');
+        string_slice_to_string(flag_slice, &flag);
+        string_slice_to_string(name_slice, &name);
+
+        int name_length = strlen(name);
+        if (strncmp(args_str + index - 2, name, name_length) == 0) {
+          // use name as key to access argument.
+          hash_table_search(parser->arguments, name, (void **)&arg);
+
+          new_index = validate_argument(arg, args_str, index + name_length - 2);
+
+          RETURN_DEFER(new_index);
+        }
+      }
+
+      if (arg != NULL) {
+        LOG_ERROR("invalid optional argument name");
+      }
+      break;
+    }
+    default:
+      LOG_ERROR("Should NOT print this message.");
+  }
+
+defer:
+  if (ss != NULL) {
+    string_slice_destroy(&ss);
+  }
+
+  if (output != NULL) {
+    string_slice_destroy(&output);
+  }
+
+  if (flag_slice != NULL) {
+    string_slice_destroy(&flag_slice);
+  }
+
+  if (name_slice != NULL) {
+    string_slice_destroy(&name_slice);
+  }
+
+  if (opt_args != NULL) {
+    FREE(opt_args);
+  }
+
+  if (opt_str != NULL) {
+    FREE(opt_str);
+  }
+
+  if (flag != NULL) {
+    FREE(flag);
   }
 
   if (name != NULL) {
-    string_builder_destroy(&name);
-  }
-
-  if (args != NULL) {
-    FREE(args);
+    FREE(name);
   }
 
   return result;
@@ -765,29 +920,29 @@ defer:
 int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   int result = STATUS_SUCCESS;
   char *args_str = NULL;
-  char *opt_flags = NULL;
-  char *opt_names = NULL;
+  int pos_args_count = 0;
 
   if ((result = concat_argv(argc, argv, &args_str)) != 0) {
     RETURN_DEFER(result);
   }
 
-  format_opt_args(parser, &opt_flags, &opt_names);
-
-  LOG_DEBUG("args_string: %s", args_str);
-
-  if (hash_table_get_size(parser->arguments)) {
+  int args_length = strlen(args_str);
+  for (int i = 0; i < args_length; i++) {
+    if ((strncmp(args_str + i, "--", 2)) == 0) {
+      // Optional name argument.
+      i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_NAME, i + 2);
+    } else if (args_str[i] == '-') {
+      // Optional flag argument.
+      while (args_str[i] != ' ') {
+        i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_FLAG, i + 1);
+      }
+    } else {
+      // Positional argument.
+      i = parse_positional_argument(parser, args_str, i, ++pos_args_count);
+    }
   }
 
 defer:
-  if (opt_flags != NULL) {
-    FREE(opt_flags);
-  }
-
-  if (opt_names != NULL) {
-    FREE(opt_names);
-  }
-
   if (args_str != NULL) {
     FREE(args_str);
   }
