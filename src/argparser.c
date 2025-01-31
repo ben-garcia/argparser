@@ -274,24 +274,27 @@ static int validate_argument(argparser_argument *arg, char *args_str,
   switch (arg->action) {
     case AP_ARG_STORE:
     case AP_ARG_STORE_APPEND: {
-      string_builder *value = NULL;
-      string_builder_create(&value);
+      string_slice *value_slice = NULL;
 
       if (args_str[i] == ' ') {
         // Skip whitespace between argument flag and value.
         i++;
       }
 
+      string_slice_create(&value_slice, args_str + i, 0);
+
       while (args_str[i] != ' ') {
         if (*(args_str + i) == '\0') {
           break;
         }
-        //  Construct value string.
-        string_builder_append_char(value, args_str[i++]);
+
+        // Construct value string.
+        string_slice_advance(&value_slice);
+        i++;
       }
 
-      string_builder_build(value, &arg->type_value.str_value);
-      string_builder_destroy(&value);
+      string_slice_to_string(value_slice, &arg->type_value.str_value);
+      string_slice_destroy(&value_slice);
       break;
     }
     case AP_ARG_STORE_CONST:
