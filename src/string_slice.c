@@ -39,11 +39,15 @@ int string_slice_split(string_slice *ss, string_slice *output,
   int result = STATUS_SUCCESS;
 
   if (ss->string == NULL) {
+    output->string = NULL;
+    output->length = 0;
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   // string slice is empty.
   if (ss->length == 0) {
+    output->string = NULL;
+    output->length = 0;
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
@@ -101,9 +105,17 @@ int string_slice_to_string(string_slice *ss, char **str) {
   int result = STATUS_SUCCESS;
 
   // string slice is empty.
-  if (ss->string == NULL || ss->length == 0) {
-    LOG_ERROR("string slice cannot be NULL");
+  if (ss->string == NULL) {
+    *str = NULL;
+    ss->length = 0;
     RETURN_DEFER(STATUS_IS_NULL);
+  }
+
+  // string slice is empty.
+  if (ss->length == 0) {
+    *str = NULL;
+    ss->string = NULL;
+    RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
   if (((*str) = MALLOC(ss->length + 1)) == NULL) {
