@@ -35,7 +35,7 @@
  */
 #define GET_ARG_FROM_PARSER(args, name, arg)                           \
   do {                                                                 \
-    if (strlen((name))) {                                              \
+    if (strlen((name)) == 0) {                                         \
       RETURN_DEFER(6);                                                 \
     }                                                                  \
     result = hash_table_search(args, name_or_flag, ((void **)(&arg))); \
@@ -82,25 +82,31 @@ typedef struct argparser_argument {
     char *str_value;         // Action 'store', 'store_const'
     dynamic_array *values;   // Actions 'append', 'append_const', 'extend'
     float float_value;       // Action 'store', 'store_const'
-    unsigned int int_value;  // Action 'store', 'store_const', 'store_true',
-                             // 'store_false', 'count'
+    unsigned int int_value;  // Action 'store', 'store_const', 'count'
+    bool bool_value;         // Actions 'store_true', and 'store_false'.
   } type_value;
   // argparser_arg_type arg_type;  // positional or optional
 } argparser_argument;
 
 struct argparser {
-  hash_table *arguments;            // Entries of argparser_argument.
-  string_builder *positional_args;  // Concatenated string of all positional
-                                    // argument names.
-  string_builder *optional_args;    // Concatenated string of all optional
-                                    // argument short names.
-  char *name;                       // Program name(default is argv[0])
-  char *usage;                      // Describing program usage.
-  char *description;   // Text to display before argument help message.
-  char *epilogue;      // text to display after argument help message
-  char *prefix_chars;  // Chars that prefix optional arguments('-')
-  char add_help;       // Add -h/--help option to the parser.
-  char allow_abbrev;   // Allow abbreviations of long args name.
+  hash_table *arguments;              // Entries of argparser_argument.
+  string_builder *positional_args;    // Concatenated string of all positional
+                                      // argument names.
+  string_builder *optional_args;      // Concatenated string of all optional
+                                      // argument short names.
+  string_builder *req_opt_args;       // Number of optional arguments that must
+                                      // be passed in.
+  string_builder *unrecognized_args;  // Arguments that don't match the
+                                      // parser arguments.
+  char *name;                         // Program name(default is argv[0])
+  char *usage;                        // Describing program usage.
+  char *description;           // Text to display before argument help message.
+  char *epilogue;              // text to display after argument help message
+  char *prefix_chars;          // Chars that prefix optional arguments('-')
+  char add_help;               // Add -h/--help option to the parser.
+  char allow_abbrev;           // Allow abbreviations of long args name.
+  unsigned int pos_args_size;  // Number of positional arguments.
+  unsigned int req_opt_args_size;  // Number of required optional arguments.
 };
 
 /**
@@ -135,6 +141,8 @@ static int arg_create(argparser_argument **arg, char short_name[2],
   (*arg)->short_name = short_name;
   (*arg)->type = AP_ARG_STRING;
   (*arg)->type_value.str_value = NULL;
+  // Allocate memory ONLY when it's needed.
+  (*arg)->type_value.values = NULL;
 
 defer:
   return result;
@@ -142,10 +150,17 @@ defer:
 
 static void arg_destroy(void **arg) {
   if (*arg != NULL) {
-    // TODO: deallocate memory
-    if ((((argparser_argument *)(*arg))->type_value.str_value)) {
+    if ((((argparser_argument *)(*arg))->type_value.str_value) != NULL &&
+        ((argparser_argument *)(*arg))->type == AP_ARG_STRING) {
       FREE(((argparser_argument *)(*arg))->type_value.str_value);
     }
+
+    // FIXME: when action is 'store_append', more 'free' calls than needed.
+    if ((((argparser_argument *)(*arg))->type_value.values) != NULL &&
+        (((argparser_argument *)(*arg))->action == AP_ARG_STORE_APPEND)) {
+      dynamic_array_destroy(&((argparser_argument *)(*arg))->type_value.values);
+    }
+
     FREE(*arg);
     *arg = NULL;
   }
@@ -272,8 +287,42 @@ static int validate_argument(argparser_argument *arg, char *args_str,
   int i = index;
 
   switch (arg->action) {
-    case AP_ARG_STORE:
     case AP_ARG_STORE_APPEND: {
+      string_slice *value_slice = NULL;
+      char *value = NULL;
+
+      if (args_str[i] == ' ') {
+        // Skip whitespace between argument flag and value.
+        i++;
+      }
+
+      string_slice_create(&value_slice, args_str + i, 0);
+
+      while (args_str[i] != ' ') {
+        if (*(args_str + i) == '\0') {
+          break;
+        }
+
+        // Construct value string.
+        string_slice_advance(&value_slice);
+        i++;
+      }
+
+      string_slice_to_string(value_slice, &value);
+
+      // Create only when it's needed.
+      if (arg->type_value.values == NULL &&
+          arg->action == AP_ARG_STORE_APPEND) {
+        dynamic_array_create(&arg->type_value.values, sizeof(char *), NULL,
+                             NULL);
+      }
+
+      dynamic_array_add(arg->type_value.values, value);
+
+      string_slice_destroy(&value_slice);
+      break;
+    }
+    case AP_ARG_STORE: {
       string_slice *value_slice = NULL;
 
       if (args_str[i] == ' ') {
@@ -298,12 +347,19 @@ static int validate_argument(argparser_argument *arg, char *args_str,
       break;
     }
     case AP_ARG_STORE_CONST:
+      break;
     case AP_ARG_STORE_APPEND_CONST:
+      break;
     case AP_ARG_STORE_EXTEND:
+      break;
     case AP_ARG_STORE_COUNT:
+      arg->type_value.int_value++;
       break;
     case AP_ARG_STORE_TRUE:
+      arg->type_value.bool_value = true;
+      break;
     case AP_ARG_STORE_FALSE:
+      arg->type_value.bool_value = false;
       break;
     case AP_ARG_STORE_VERSION:
       break;
@@ -331,7 +387,6 @@ static int parse_positional_argument(argparser *parser, char *args_str,
   string_slice *output = NULL;
   char *pos_args_str = NULL;
   char *name = NULL;
-  int new_index = 0;
 
   string_builder_build(parser->positional_args, &pos_args_str);
 
@@ -342,18 +397,40 @@ static int parse_positional_argument(argparser *parser, char *args_str,
   string_slice_trim(ss);
 
   for (unsigned int i = 0; i < args_num; i++) {
-    string_slice_split(ss, output, ' ');
+    if ((string_slice_split(ss, output, ' ')) != 0) {
+      break;
+    }
   }
 
   string_slice_to_string(output, &name);
   if (name) {
     hash_table_search(parser->arguments, name, (void **)&arg);
-    new_index = validate_argument(arg, args_str, index);
-    RETURN_DEFER(new_index);
+    index = validate_argument(arg, args_str, index);
+    RETURN_DEFER(index);
   }
 
-  if (arg != NULL) {
-    LOG_ERROR("invalid optional argument name");
+  string_slice_destroy(&ss);
+
+  string_slice_create(&ss, args_str + index, 0);
+  while (args_str[index] != ' ') {
+    if (*(args_str + index) == '\0') {
+      break;
+    }
+    string_slice_advance(&ss);
+    index++;
+  }
+
+  string_slice_to_string(ss, &name);
+
+  // Only allocate memory if unrecognized argument has been detected.
+  if (parser->unrecognized_args == NULL) {
+    string_builder_create(&parser->unrecognized_args);
+  }
+
+  if (arg == NULL && name != NULL) {
+    string_builder_append(parser->unrecognized_args, name, strlen(name));
+    string_builder_append_char(parser->unrecognized_args, ' ');
+    RETURN_DEFER(index);
   }
 
 defer:
@@ -364,6 +441,7 @@ defer:
   if (output != NULL) {
     string_slice_destroy(&output);
   }
+
   if (name != NULL) {
     FREE(name);
   }
@@ -419,16 +497,12 @@ static int parse_optional_argument(argparser *parser, char *args_str,
         if (args_str[index] == flag[1] && name[2] != 0) {
           // use name as key to access argument.
           hash_table_search(parser->arguments, name, (void **)&arg);
-
           new_index = validate_argument(arg, args_str, index + 1);
-
           RETURN_DEFER(new_index);
         } else if (args_str[index] == flag[1] && name[2] == 0) {
           // use flag as key to access argument.
           hash_table_search(parser->arguments, flag, (void **)&arg);
-
           new_index = validate_argument(arg, args_str, index + 1);
-
           RETURN_DEFER(new_index);
         }
         string_slice_destroy(&flag_slice);
@@ -456,9 +530,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
         if (strncmp(args_str + index - 2, name, name_length) == 0) {
           // use name as key to access argument.
           hash_table_search(parser->arguments, name, (void **)&arg);
-
           new_index = validate_argument(arg, args_str, index + name_length - 2);
-
           RETURN_DEFER(new_index);
         }
       }
@@ -530,6 +602,10 @@ int argparser_create(argparser **parser) {
     RETURN_DEFER(result);
   }
 
+  if ((result = string_builder_create(&(*parser)->req_opt_args)) != 0) {
+    RETURN_DEFER(result);
+  }
+
   (*parser)->name = NULL;
   (*parser)->usage = NULL;
   (*parser)->description = NULL;
@@ -537,6 +613,9 @@ int argparser_create(argparser **parser) {
   (*parser)->prefix_chars = NULL;
   (*parser)->add_help = true;
   (*parser)->allow_abbrev = true;
+  (*parser)->pos_args_size = 0;
+  (*parser)->req_opt_args_size = 0;
+  (*parser)->unrecognized_args = NULL;
 
 defer:
   return result;
@@ -646,6 +725,8 @@ int argparser_add_argument(argparser *parser, char short_name[2],
     }
 
     hash_table_insert(parser->arguments, long_name, arg);
+
+    parser->pos_args_size++;
   } else if (arg_kind == 2) {
     // Optional argument with short_name as key.
 
@@ -811,10 +892,44 @@ int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
 
   GET_ARG_FROM_PARSER(parser->arguments, name_or_flag, arg);
 
+  int bytes = 0;
+  char *flag;
+  char *name;
+
+  if (arg->short_name == NULL) {
+    flag = "-0";
+  } else {
+    flag = arg->short_name;
+  }
+  bytes += 2;
+
+  if (arg->long_name == NULL) {
+    name = "--0\0";
+    bytes += 3;
+  } else {
+    name = arg->long_name;
+    bytes += strlen(arg->long_name);
+  }
+
+  char *concat_str = MALLOC(bytes);
+
+  // TODO: make sure this isn't going to add null character.
+  snprintf(concat_str, bytes, "%s,%s", flag, name);
+
+  if ((result = string_builder_append(parser->req_opt_args, concat_str,
+                                      strlen(concat_str))) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  parser->req_opt_args_size++;
+
   // TODO: malloc here
   arg->required = required;
 
 defer:
+  if (concat_str != NULL) {
+    FREE(concat_str);
+  }
   return result;
 }
 
@@ -923,7 +1038,7 @@ defer:
 int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   int result = STATUS_SUCCESS;
   char *args_str = NULL;
-  int pos_args_count = 0;
+  unsigned int current_pos_count = 0;
 
   if ((result = concat_argv(argc, argv, &args_str)) != 0) {
     RETURN_DEFER(result);
@@ -941,8 +1056,16 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
       }
     } else {
       // Positional argument.
-      i = parse_positional_argument(parser, args_str, i, ++pos_args_count);
+      i = parse_positional_argument(parser, args_str, i, ++current_pos_count);
     }
+  }
+
+  if (parser->unrecognized_args != NULL) {
+    char *args = NULL;
+
+    string_builder_build(parser->unrecognized_args, &args);
+    LOG_ERROR("unrecognized argument(s): %s", args);
+    FREE(args);
   }
 
 defer:
@@ -958,6 +1081,11 @@ void argparser_destroy(argparser **parser) {
     hash_table_destroy(&(*parser)->arguments);
     string_builder_destroy(&(*parser)->positional_args);
     string_builder_destroy(&(*parser)->optional_args);
+    string_builder_destroy(&(*parser)->req_opt_args);
+
+    if ((*parser)->unrecognized_args != NULL) {
+      string_builder_destroy(&(*parser)->unrecognized_args);
+    }
 
     FREE(*parser);
     *parser = NULL;

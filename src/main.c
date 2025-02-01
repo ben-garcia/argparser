@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
   argparser_add_action_to_arg(parser, ARG_LONG_FORCE, AP_ARG_STORE_CONST);
   argparser_add_type_to_arg(parser, ARG_LONG_FORCE, AP_ARG_INT);
   argparser_add_help_to_arg(parser, ARG_LONG_FORCE, "This is the help message");
-  argparser_add_required_to_arg(parser, ARG_LONG_FORCE, false);
+  argparser_add_required_to_arg(parser, ARG_LONG_FORCE, true);
   argparser_add_deprecated_to_arg(parser, ARG_LONG_FORCE, true);
   argparser_add_dest_to_arg(parser, ARG_LONG_FORCE, "FORCE");
   argparser_add_nargs_to_arg(parser, ARG_LONG_FORCE, "2");
