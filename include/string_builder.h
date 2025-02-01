@@ -68,6 +68,15 @@ int string_builder_append_fmtstr(string_builder *sb, const char *format, ...);
 int string_builder_build(string_builder *sb, char **buffer);
 
 /**
+ * Check if string_builder is empty.
+ *
+ * @param sb string_builder to check.
+ *
+ * @return 0 on success, 1 otherwise.
+ */
+int string_builder_is_empty(string_builder *sb);
+
+/**
  * Deallocate and set to NULL.
  *
  * @param sb string_builder to deallocate.

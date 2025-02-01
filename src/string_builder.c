@@ -92,6 +92,10 @@ defer:
   return result;
 }
 
+int string_builder_is_empty(string_builder *sb) {
+  return dynamic_array_is_empty(sb->string);
+}
+
 void string_builder_destroy(string_builder **sb) {
   if (*sb != NULL) {
     dynamic_array_destroy(&(*sb)->string);
