@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
   argparser_add_abbrev_to_argparser(&parser, false);
 
   argparser_add_argument(parser, NULL, ARG_LONG_FORCE);  // valid
-  argparser_add_action_to_arg(parser, ARG_LONG_FORCE, AP_ARG_STORE_CONST);
+  // argparser_add_action_to_arg(parser, ARG_LONG_FORCE, AP_ARG_STORE_CONST);
   argparser_add_type_to_arg(parser, ARG_LONG_FORCE, AP_ARG_INT);
   argparser_add_help_to_arg(parser, ARG_LONG_FORCE, "This is the help message");
   argparser_add_required_to_arg(parser, ARG_LONG_FORCE, true);

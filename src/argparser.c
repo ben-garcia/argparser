@@ -147,16 +147,8 @@ defer:
 
 static void arg_destroy(void **arg) {
   if (*arg != NULL) {
-    if (((argparser_argument *)(*arg))->value != NULL &&
-        ((argparser_argument *)(*arg))->type == AP_ARG_STRING) {
+    if (((argparser_argument *)(*arg))->value != NULL) {
       FREE(((argparser_argument *)(*arg))->value);
-    }
-
-    // FIXME: when action is 'store_append', more 'free' calls than needed.
-    if ((((argparser_argument *)(*arg))->value) != NULL &&
-        (((argparser_argument *)(*arg))->action == AP_ARG_STORE_APPEND)) {
-      dynamic_array_destroy(
-          (dynamic_array **)&((argparser_argument *)(*arg))->value);
     }
 
     FREE(*arg);
@@ -357,7 +349,9 @@ static int validate_argument(argparser_argument *arg, char *args_str,
           break;
         }
 
-        if (*(args_str + i) == '\0') break;
+        if (*(args_str + i) == '\0') {
+          break;
+        }
 
         // Construct value string.
         string_slice_advance(&value_slice);
@@ -568,6 +562,15 @@ static int parse_optional_argument(argparser *parser, char *args_str,
           index = validate_argument(arg, args_str, index + name_length - 2);
           RETURN_DEFER(index);
         }
+
+        string_slice_destroy(&flag_slice);
+        string_slice_destroy(&name_slice);
+        FREE(flag);
+        flag = NULL;
+        FREE(name);
+        name = NULL;
+        FREE(opt_str);
+        opt_str = NULL;
       }
 
       // Only allocate memory if unrecognized argument has been detected.
@@ -583,8 +586,11 @@ static int parse_optional_argument(argparser *parser, char *args_str,
       string_slice_to_string(output, &name);
 
       if (arg == NULL) {
-        string_builder_append(parser->unrecognized_args, name, strlen(name));
+        int name_length = strlen(name);
+        string_builder_append(parser->unrecognized_args, name, name_length);
         string_builder_append_char(parser->unrecognized_args, ' ');
+        index += name_length - 2;  // exclude double dashes(--)
+        RETURN_DEFER(index);
       }
 
       RETURN_DEFER(++index);
@@ -625,6 +631,79 @@ defer:
 
   if (name != NULL) {
     FREE(name);
+  }
+
+  return result;
+}
+
+/**
+ * Verify that name is a valid argument.
+ *
+ * @param parser argparser
+ * @param name Argument name to check.
+ * @param name_length size of name to check.
+ */
+static int is_valid_arg_name(argparser *parser, char *name, int name_length) {
+  int result = STATUS_FAILURE;
+  string_slice *ss = NULL;
+  string_slice *name_slice = NULL;
+  string_slice *flag_slice = NULL;
+  string_slice *output = NULL;
+  char *opt_args_str = NULL;
+  char *opt_str = NULL;
+  char *arg_name = NULL;
+
+  string_builder_build(parser->optional_args, &opt_args_str);
+
+  string_slice_create(&ss, opt_args_str, strlen(opt_args_str));
+  string_slice_create(&output, NULL, 0);
+
+  while (string_slice_split(ss, output, ' ') == 0) {
+    string_slice_to_string(output, &opt_str);
+    string_slice_create(&flag_slice, NULL, 0);
+    string_slice_create(&name_slice, opt_str, strlen(opt_str));
+    string_slice_split(name_slice, flag_slice, ',');
+    string_slice_to_string(name_slice, &arg_name);
+
+    if (strncmp(arg_name + 2, name, name_length) == 0) {
+      RETURN_DEFER(STATUS_SUCCESS);
+    }
+
+    string_slice_destroy(&flag_slice);
+    string_slice_destroy(&name_slice);
+    FREE(opt_str);
+    opt_str = NULL;
+    FREE(arg_name);
+    arg_name = NULL;
+  }
+
+defer:
+  if (ss != NULL) {
+    string_slice_destroy(&ss);
+  }
+
+  if (output != NULL) {
+    string_slice_destroy(&output);
+  }
+
+  if (flag_slice != NULL) {
+    string_slice_destroy(&flag_slice);
+  }
+
+  if (name_slice != NULL) {
+    string_slice_destroy(&name_slice);
+  }
+
+  if (opt_args_str != NULL) {
+    FREE(opt_args_str);
+  }
+
+  if (opt_str != NULL) {
+    FREE(opt_str);
+  }
+
+  if (arg_name != NULL) {
+    FREE(arg_name);
   }
 
   return result;
@@ -1098,10 +1177,40 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   for (int i = 0; i < args_length; i++) {
     if ((strncmp(args_str + i, "--", 2)) == 0) {
       // Optional name argument.
+      int index = i + 2;
+      string_slice *ss = NULL;
+      string_slice_create(&ss, args_str + i + 2, 0);
+      while (args_str[index++] != ' ') {
+        string_slice_advance(&ss);
+      }
+      char *name = NULL;
+      string_slice_to_string(ss, &name);
+      int name_length = strlen(name);
+
+      if (is_valid_arg_name(parser, name, name_length) == 0 &&
+          i + name_length + 3 < args_length &&
+          args_str[i + name_length + 3] == '-') {
+        // Argument name value cannot conflict with another argument flag.
+        printf("error: argument --%s expected one argument\n", name);
+        i += name_length + 2;
+        string_slice_destroy(&ss);
+        FREE(name);
+        continue;
+      }
+      string_slice_destroy(&ss);
+      FREE(name);
+
       i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_NAME, i + 2);
     } else if (args_str[i] == '-') {
       // Optional flag argument.
       while (args_str[i] != ' ' && i < args_length) {
+        // Argument flag value cannot conflict with another argument's name.
+        if (strncmp(args_str + i + 2, "--", 2) == 0) {
+          printf("error: argument -%c expected one argument\n", args_str[i]);
+          i++;
+          break;
+        }
+
         if (args_str[i] == '-') {
           i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_FLAG,
                                       i + 1);
