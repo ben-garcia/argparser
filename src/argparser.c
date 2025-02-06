@@ -93,7 +93,7 @@ struct argparser {
                                       // argument names.
   string_builder *optional_args;      // Concatenated string of all optional
                                       // argument short names.
-  string_builder *req_opt_args;       // Number of optional arguments that must
+  string_builder *req_opt_args;       // Optional arguments that must
                                       // be passed in.
   string_builder *unrecognized_args;  // Arguments that don't match the
                                       // parser arguments.
@@ -264,6 +264,74 @@ defer:
 }
 
 /**
+ *
+ */
+static int separate_opt_args(argparser *parser, hash_table **flags,
+                             hash_table **names) {
+  int result = STATUS_SUCCESS;
+
+  if (((result = hash_table_create(flags, sizeof(char *), NULL, NULL)) != 0) ||
+      (result = hash_table_create(names, sizeof(char *), NULL, NULL)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  string_slice *ss = NULL;
+  string_slice *output = NULL;
+  char *opt_args = NULL;
+
+  string_builder_build(parser->optional_args, &opt_args);
+
+  if (((result = string_slice_create(&ss, opt_args, strlen(opt_args))) != 0) ||
+      (result = string_slice_create(&output, NULL, 0)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  string_slice *flag_slice = NULL;
+  string_slice *name_slice = NULL;
+  char *flag = NULL;
+  char *name = NULL;
+  char *opt_str = NULL;
+
+  string_slice_trim(ss);
+
+  while (string_slice_split(ss, output, ' ') == 0) {
+    string_slice_to_string(output, &opt_str);
+    string_slice_create(&name_slice, opt_str, strlen(opt_str));
+    string_slice_create(&flag_slice, NULL, 0);
+    string_slice_split(name_slice, flag_slice, ',');
+    string_slice_to_string(flag_slice, &flag);
+    string_slice_to_string(name_slice, &name);
+
+    if (strncmp(flag, "-0", 2) != 0 && strncmp(name, "--0", 3) == 0) {
+      // flag found.
+      hash_table_insert(*flags, flag, "--0");
+    } else if (strncmp(name, "--0", 3) != 0 && strncmp(flag, "-0", 2) == 0) {
+      // name found.
+      hash_table_insert(*names, name, "-0");
+    } else {
+      // flag and name are defined.
+      hash_table_insert(*flags, flag, name);
+    }
+
+    string_slice_destroy(&flag_slice);
+    string_slice_destroy(&name_slice);
+    FREE(flag);
+    flag = NULL;
+    FREE(name);
+    name = NULL;
+    FREE(opt_str);
+    opt_str = NULL;
+  }
+
+  string_slice_destroy(&ss);
+  string_slice_destroy(&output);
+  FREE(opt_args);
+
+defer:
+  return result;
+}
+
+/**
  * Validate the argument.
  *
  * @param parg argparser_argument to validate.
@@ -421,7 +489,7 @@ static int parse_positional_argument(argparser *parser, char *args_str,
   }
 
   string_slice_to_string(output, &name);
-  if (name) {
+  if (name != NULL) {
     hash_table_search(parser->arguments, name, (void **)&arg);
     index = validate_argument(arg, args_str, index);
     RETURN_DEFER(index);
@@ -472,6 +540,48 @@ defer:
 }
 
 /**
+ * Loop through the current argument string position until a space is
+ * encountered.
+ *
+ * @param args_str position of the current argument string.
+ * @param index position of args_str.
+ * @param name buffer to store the name of the argument.
+ *
+ * @return 0 on success,
+ *         2 indicates failure to allocation memory for 'str',
+ *         4 indicates index is out of bounds.
+ */
+static int get_arg_name(char *args_str, unsigned int index, char **name) {
+  int result = STATUS_SUCCESS;
+  string_slice *ss = NULL;
+
+  if (((result = string_slice_create(&ss, args_str + index, 0)) != 0)) {
+    RETURN_DEFER(result);
+  }
+
+  unsigned int args_str_length = strlen(args_str);
+  while (args_str[index] != ' ') {
+    if (index >= args_str_length) {
+      string_slice_to_string(ss, name);
+      RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
+    }
+    string_slice_advance(&ss);
+    index++;
+  }
+
+  if ((result = string_slice_to_string(ss, name) != 0)) {
+    RETURN_DEFER(result);
+  }
+
+defer:
+  if (ss != NULL) {
+    string_slice_destroy(&ss);
+  }
+
+  return result;
+}
+
+/**
  * Parse the optional argument.
  *
  * @param parser argparser
@@ -484,7 +594,8 @@ defer:
  * @return how much to move forward.
  */
 static int parse_optional_argument(argparser *parser, char *args_str,
-                                   arg_kind kind, unsigned short index) {
+                                   arg_kind kind, unsigned short index,
+                                   hash_table *flags) {
   int result = 0;
   string_slice *ss = NULL;
   string_slice *output = NULL;
@@ -493,6 +604,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
   argparser_argument *arg = NULL;
   char *flag = NULL;
   char *name = NULL;
+  char *value = NULL;
   char *opt_str = NULL;
   char *opt_args = NULL;
 
@@ -503,33 +615,20 @@ static int parse_optional_argument(argparser *parser, char *args_str,
 
   switch (kind) {
     case ARG_KIND_OPT_FLAG: {
-      while ((string_slice_split(ss, output, ' ')) == 0) {
-        string_slice_to_string(output, &opt_str);
-        string_slice_create(&name_slice, opt_str, strlen(opt_str));
-        string_slice_create(&flag_slice, NULL, 0);
-        string_slice_split(name_slice, flag_slice, ',');
-        string_slice_to_string(flag_slice, &flag);
-        string_slice_to_string(name_slice, &name);
+      char concat_str[3];
+      sprintf(concat_str, "-%c", args_str[index]);
 
-        if (args_str[index] == flag[1] && name[2] != '0') {
-          // use name as key to access argument.
-          hash_table_search(parser->arguments, name, (void **)&arg);
-          index = validate_argument(arg, args_str, index + 1);
-          RETURN_DEFER(index);
-        } else if (args_str[index] == flag[1] && name[2] == '0') {
-          // use flag as key to access argument.
-          hash_table_search(parser->arguments, flag, (void **)&arg);
-          index = validate_argument(arg, args_str, index + 1);
-          RETURN_DEFER(index);
-        }
-        string_slice_destroy(&flag_slice);
-        string_slice_destroy(&name_slice);
-        FREE(flag);
-        flag = NULL;
-        FREE(name);
-        name = NULL;
-        FREE(opt_str);
-        opt_str = NULL;
+      int found = hash_table_search(flags, concat_str, (void **)&value);
+      if (found == 0 && value != NULL && strncmp(value, "--0", 3) != 0) {
+        // use name as key to access argument.
+        hash_table_search(parser->arguments, value, (void **)&arg);
+        index = validate_argument(arg, args_str, index + 1);
+        RETURN_DEFER(index);
+      } else if (found == 0 && strncmp(value, "--0", 3) == 0) {
+        // use flag as key to access argument.
+        hash_table_search(parser->arguments, concat_str, (void **)&arg);
+        index = validate_argument(arg, args_str, index + 1);
+        RETURN_DEFER(index);
       }
 
       // Only allocate memory if unrecognized argument has been detected.
@@ -547,30 +646,17 @@ static int parse_optional_argument(argparser *parser, char *args_str,
       break;
     }
     case ARG_KIND_OPT_NAME: {
-      while ((string_slice_split(ss, output, ' ')) == 0) {
-        string_slice_to_string(output, &opt_str);
-        string_slice_create(&name_slice, opt_str, strlen(opt_str));
-        string_slice_create(&flag_slice, NULL, 0);
-        string_slice_split(name_slice, flag_slice, ',');
-        string_slice_to_string(flag_slice, &flag);
-        string_slice_to_string(name_slice, &name);
+      if (get_arg_name(args_str, index, &name) == STATUS_OUT_OF_BOUNDS) {
+        printf("error: argument %s expected one argument\n", name);
+        RETURN_DEFER(strlen(args_str));
+      }
 
-        int name_length = strlen(name);
-        if (strncmp(args_str + index - 2, name, name_length) == 0) {
-          // use name as key to access argument.
-          hash_table_search(parser->arguments, name, (void **)&arg);
-          index = validate_argument(arg, args_str, index + name_length - 2);
-          RETURN_DEFER(index);
-        }
+      int name_length = strlen(name);
 
-        string_slice_destroy(&flag_slice);
-        string_slice_destroy(&name_slice);
-        FREE(flag);
-        flag = NULL;
-        FREE(name);
-        name = NULL;
-        FREE(opt_str);
-        opt_str = NULL;
+      if (hash_table_search(parser->arguments, name, (void **)&arg) == 0) {
+        // use name as key to access argument.
+        index = validate_argument(arg, args_str, index + name_length);
+        RETURN_DEFER(index);
       }
 
       // Only allocate memory if unrecognized argument has been detected.
@@ -578,15 +664,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
         string_builder_create(&parser->unrecognized_args);
       }
 
-      string_slice_destroy(&ss);
-      string_slice_create(&ss, args_str + index - 2, strlen(args_str + index));
-
-      string_slice_split(ss, output, ' ');
-
-      string_slice_to_string(output, &name);
-
       if (arg == NULL) {
-        int name_length = strlen(name);
         string_builder_append(parser->unrecognized_args, name, name_length);
         string_builder_append_char(parser->unrecognized_args, ' ');
         index += name_length - 2;  // exclude double dashes(--)
@@ -1168,8 +1246,14 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   int result = STATUS_SUCCESS;
   char *args_str = NULL;
   unsigned int current_pos_count = 0;
+  hash_table *flags = NULL;
+  hash_table *names = NULL;
 
   if ((result = concat_argv(argc, argv, &args_str)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  if ((result = separate_opt_args(parser, &flags, &names)) != 0) {
     RETURN_DEFER(result);
   }
 
@@ -1180,7 +1264,7 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
       int index = i + 2;
       string_slice *ss = NULL;
       string_slice_create(&ss, args_str + i + 2, 0);
-      while (args_str[index++] != ' ') {
+      while (index < args_length && args_str[index++] != ' ') {
         string_slice_advance(&ss);
       }
       char *name = NULL;
@@ -1197,10 +1281,12 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
         FREE(name);
         continue;
       }
+
       string_slice_destroy(&ss);
       FREE(name);
 
-      i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_NAME, i + 2);
+      i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_NAME, i,
+                                  flags);
     } else if (args_str[i] == '-') {
       // Optional flag argument.
       while (args_str[i] != ' ' && i < args_length) {
@@ -1213,9 +1299,10 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
 
         if (args_str[i] == '-') {
           i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_FLAG,
-                                      i + 1);
+                                      i + 1, flags);
         } else {
-          i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_FLAG, i);
+          i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_FLAG, i,
+                                      flags);
         }
       }
     } else {
@@ -1233,6 +1320,14 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   }
 
 defer:
+  if (flags != NULL) {
+    hash_table_destroy(&flags);
+  }
+
+  if (names != NULL) {
+    hash_table_destroy(&names);
+  }
+
   if (args_str != NULL) {
     FREE(args_str);
   }
