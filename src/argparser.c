@@ -266,12 +266,10 @@ defer:
 /**
  *
  */
-static int separate_opt_args(argparser *parser, hash_table **flags,
-                             hash_table **names) {
+static int separate_opt_args(argparser *parser, hash_table **flags) {
   int result = STATUS_SUCCESS;
 
-  if (((result = hash_table_create(flags, sizeof(char *), NULL, NULL)) != 0) ||
-      (result = hash_table_create(names, sizeof(char *), NULL, NULL)) != 0) {
+  if (((result = hash_table_create(flags, sizeof(char *), NULL, NULL)) != 0)) {
     RETURN_DEFER(result);
   }
 
@@ -307,7 +305,6 @@ static int separate_opt_args(argparser *parser, hash_table **flags,
       hash_table_insert(*flags, flag, "--0");
     } else if (strncmp(name, "--0", 3) != 0 && strncmp(flag, "-0", 2) == 0) {
       // name found.
-      hash_table_insert(*names, name, "-0");
     } else {
       // flag and name are defined.
       hash_table_insert(*flags, flag, name);
@@ -597,21 +594,9 @@ static int parse_optional_argument(argparser *parser, char *args_str,
                                    arg_kind kind, unsigned short index,
                                    hash_table *flags) {
   int result = 0;
-  string_slice *ss = NULL;
-  string_slice *output = NULL;
-  string_slice *name_slice = NULL;
-  string_slice *flag_slice = NULL;
   argparser_argument *arg = NULL;
-  char *flag = NULL;
   char *name = NULL;
   char *value = NULL;
-  char *opt_str = NULL;
-  char *opt_args = NULL;
-
-  string_builder_build(parser->optional_args, &opt_args);
-
-  string_slice_create(&ss, opt_args, strlen(opt_args));
-  string_slice_create(&output, NULL, 0);
 
   switch (kind) {
     case ARG_KIND_OPT_FLAG: {
@@ -679,34 +664,6 @@ static int parse_optional_argument(argparser *parser, char *args_str,
   }
 
 defer:
-  if (ss != NULL) {
-    string_slice_destroy(&ss);
-  }
-
-  if (output != NULL) {
-    string_slice_destroy(&output);
-  }
-
-  if (flag_slice != NULL) {
-    string_slice_destroy(&flag_slice);
-  }
-
-  if (name_slice != NULL) {
-    string_slice_destroy(&name_slice);
-  }
-
-  if (opt_args != NULL) {
-    FREE(opt_args);
-  }
-
-  if (opt_str != NULL) {
-    FREE(opt_str);
-  }
-
-  if (flag != NULL) {
-    FREE(flag);
-  }
-
   if (name != NULL) {
     FREE(name);
   }
@@ -715,75 +672,19 @@ defer:
 }
 
 /**
- * Verify that name is a valid argument.
+ * Verify that name is a valid argument name.
  *
  * @param parser argparser
  * @param name Argument name to check.
- * @param name_length size of name to check.
  */
-static int is_valid_arg_name(argparser *parser, char *name, int name_length) {
+static int is_valid_arg_name(argparser *parser, char *name) {
   int result = STATUS_FAILURE;
-  string_slice *ss = NULL;
-  string_slice *name_slice = NULL;
-  string_slice *flag_slice = NULL;
-  string_slice *output = NULL;
-  char *opt_args_str = NULL;
-  char *opt_str = NULL;
-  char *arg_name = NULL;
 
-  string_builder_build(parser->optional_args, &opt_args_str);
-
-  string_slice_create(&ss, opt_args_str, strlen(opt_args_str));
-  string_slice_create(&output, NULL, 0);
-
-  while (string_slice_split(ss, output, ' ') == 0) {
-    string_slice_to_string(output, &opt_str);
-    string_slice_create(&flag_slice, NULL, 0);
-    string_slice_create(&name_slice, opt_str, strlen(opt_str));
-    string_slice_split(name_slice, flag_slice, ',');
-    string_slice_to_string(name_slice, &arg_name);
-
-    if (strncmp(arg_name + 2, name, name_length) == 0) {
-      RETURN_DEFER(STATUS_SUCCESS);
-    }
-
-    string_slice_destroy(&flag_slice);
-    string_slice_destroy(&name_slice);
-    FREE(opt_str);
-    opt_str = NULL;
-    FREE(arg_name);
-    arg_name = NULL;
+  if (hash_table_search(parser->arguments, name, NULL) == 0) {
+    RETURN_DEFER(STATUS_SUCCESS);
   }
 
 defer:
-  if (ss != NULL) {
-    string_slice_destroy(&ss);
-  }
-
-  if (output != NULL) {
-    string_slice_destroy(&output);
-  }
-
-  if (flag_slice != NULL) {
-    string_slice_destroy(&flag_slice);
-  }
-
-  if (name_slice != NULL) {
-    string_slice_destroy(&name_slice);
-  }
-
-  if (opt_args_str != NULL) {
-    FREE(opt_args_str);
-  }
-
-  if (opt_str != NULL) {
-    FREE(opt_str);
-  }
-
-  if (arg_name != NULL) {
-    FREE(arg_name);
-  }
-
   return result;
 }
 
@@ -1247,13 +1148,12 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   char *args_str = NULL;
   unsigned int current_pos_count = 0;
   hash_table *flags = NULL;
-  hash_table *names = NULL;
 
   if ((result = concat_argv(argc, argv, &args_str)) != 0) {
     RETURN_DEFER(result);
   }
 
-  if ((result = separate_opt_args(parser, &flags, &names)) != 0) {
+  if ((result = separate_opt_args(parser, &flags)) != 0) {
     RETURN_DEFER(result);
   }
 
@@ -1261,28 +1161,20 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   for (int i = 0; i < args_length; i++) {
     if ((strncmp(args_str + i, "--", 2)) == 0) {
       // Optional name argument.
-      int index = i + 2;
-      string_slice *ss = NULL;
-      string_slice_create(&ss, args_str + i + 2, 0);
-      while (index < args_length && args_str[index++] != ' ') {
-        string_slice_advance(&ss);
-      }
       char *name = NULL;
-      string_slice_to_string(ss, &name);
+      get_arg_name(args_str, i, &name);
       int name_length = strlen(name);
 
-      if (is_valid_arg_name(parser, name, name_length) == 0 &&
-          i + name_length + 3 < args_length &&
-          args_str[i + name_length + 3] == '-') {
+      if (is_valid_arg_name(parser, name) == 0 &&
+          i + name_length + 1 < args_length &&
+          args_str[i + name_length + 1] == '-') {
         // Argument name value cannot conflict with another argument flag.
-        printf("error: argument --%s expected one argument\n", name);
-        i += name_length + 2;
-        string_slice_destroy(&ss);
+        printf("error: argument %s expected one argument\n", name);
+        i += name_length;
         FREE(name);
         continue;
       }
 
-      string_slice_destroy(&ss);
       FREE(name);
 
       i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_NAME, i,
@@ -1322,10 +1214,6 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
 defer:
   if (flags != NULL) {
     hash_table_destroy(&flags);
-  }
-
-  if (names != NULL) {
-    hash_table_destroy(&names);
   }
 
   if (args_str != NULL) {
