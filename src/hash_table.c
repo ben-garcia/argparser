@@ -273,15 +273,29 @@ int hash_table_search(hash_table *ht, const char *key, void **value) {
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
-  hash_table_entry *entry =
-      find_entry(ht->entries, ht->capacity, key, ht->hashfn);
-
-  if (entry->key == NULL || strlen(key) == 0) {
-    *value = NULL;
+  if (strlen(key) == 0) {
+    if (value != NULL) {
+      // Ignore value
+      *value = NULL;
+    }
     RETURN_DEFER(STATUS_FAILURE);
   }
 
-  *value = entry->value;
+  hash_table_entry *entry =
+      find_entry(ht->entries, ht->capacity, key, ht->hashfn);
+
+  if (entry->key == NULL) {
+    if (value != NULL) {
+      // Ignore value
+      *value = NULL;
+    }
+    RETURN_DEFER(STATUS_FAILURE);
+  }
+
+  if (value != NULL) {
+    // Ignore value
+    *value = entry->value;
+  }
 
 defer:
   return result;
