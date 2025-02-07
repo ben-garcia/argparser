@@ -452,6 +452,48 @@ static int validate_argument(argparser_argument *arg, char *args_str,
 }
 
 /**
+ * Loop through the current argument string position until a space is
+ * encountered.
+ *
+ * @param args_str position of the current argument string.
+ * @param index position of args_str.
+ * @param name buffer to store the name of the argument.
+ *
+ * @return 0 on success,
+ *         2 indicates failure to allocation memory for 'str',
+ *         4 indicates index is out of bounds.
+ */
+static int get_arg_name(char *args_str, unsigned int index, char **name) {
+  int result = STATUS_SUCCESS;
+  string_slice *ss = NULL;
+
+  if (((result = string_slice_create(&ss, args_str + index, 0)) != 0)) {
+    RETURN_DEFER(result);
+  }
+
+  unsigned int args_str_length = strlen(args_str);
+  while (args_str[index] != ' ') {
+    if (index >= args_str_length) {
+      string_slice_to_string(ss, name);
+      RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
+    }
+    string_slice_advance(&ss);
+    index++;
+  }
+
+  if ((result = string_slice_to_string(ss, name) != 0)) {
+    RETURN_DEFER(result);
+  }
+
+defer:
+  if (ss != NULL) {
+    string_slice_destroy(&ss);
+  }
+
+  return result;
+}
+
+/**
  * Parse the positional argument.
  *
  * @param parser argparser
@@ -494,16 +536,9 @@ static int parse_positional_argument(argparser *parser, char *args_str,
 
   string_slice_destroy(&ss);
 
-  string_slice_create(&ss, args_str + index, 0);
-  while (args_str[index] != ' ') {
-    if (*(args_str + index) == '\0') {
-      break;
-    }
-    string_slice_advance(&ss);
-    index++;
-  }
+  get_arg_name(args_str, index, &name);
 
-  string_slice_to_string(ss, &name);
+  index += strlen(name);
 
   // Only allocate memory if unrecognized argument has been detected.
   if (parser->unrecognized_args == NULL) {
@@ -531,48 +566,6 @@ defer:
 
   if (pos_args_str != NULL) {
     FREE(pos_args_str);
-  }
-
-  return result;
-}
-
-/**
- * Loop through the current argument string position until a space is
- * encountered.
- *
- * @param args_str position of the current argument string.
- * @param index position of args_str.
- * @param name buffer to store the name of the argument.
- *
- * @return 0 on success,
- *         2 indicates failure to allocation memory for 'str',
- *         4 indicates index is out of bounds.
- */
-static int get_arg_name(char *args_str, unsigned int index, char **name) {
-  int result = STATUS_SUCCESS;
-  string_slice *ss = NULL;
-
-  if (((result = string_slice_create(&ss, args_str + index, 0)) != 0)) {
-    RETURN_DEFER(result);
-  }
-
-  unsigned int args_str_length = strlen(args_str);
-  while (args_str[index] != ' ') {
-    if (index >= args_str_length) {
-      string_slice_to_string(ss, name);
-      RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
-    }
-    string_slice_advance(&ss);
-    index++;
-  }
-
-  if ((result = string_slice_to_string(ss, name) != 0)) {
-    RETURN_DEFER(result);
-  }
-
-defer:
-  if (ss != NULL) {
-    string_slice_destroy(&ss);
   }
 
   return result;
