@@ -264,7 +264,12 @@ defer:
 }
 
 /**
+ * Add argument flags to hash table.
  *
+ * @param parser argparser
+ * @param flags hash table to modify.
+ *
+ * @return 0 on success, 2 indicates memory allocation failed.
  */
 static int separate_opt_args(argparser *parser, hash_table **flags) {
   int result = STATUS_SUCCESS;
@@ -325,6 +330,55 @@ static int separate_opt_args(argparser *parser, hash_table **flags) {
   FREE(opt_args);
 
 defer:
+  return result;
+}
+
+/**
+ * Add positional arguments to dynamic array.
+ *
+ * @param parser argparser
+ * @param pos_args dynamic array to modify.
+ *
+ * @return 0 on success, 2 indicates memory allocation failed.
+ */
+static int separate_pos_args(argparser *parser, dynamic_array **pos_args) {
+  int result = STATUS_SUCCESS;
+
+  if ((result = dynamic_array_create(pos_args, sizeof(char *), NULL, NULL))) {
+    RETURN_DEFER(result);
+  }
+
+  char *pos_args_str = NULL;
+  string_slice *ss = NULL;
+  string_slice *output = NULL;
+  char *name = NULL;
+
+  string_builder_build(parser->positional_args, &pos_args_str);
+
+  if (((result = string_slice_create(&ss, pos_args_str,
+                                     strlen(pos_args_str))) != 0) ||
+      (result = string_slice_create(&output, NULL, 0)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  string_slice_trim(ss);
+  while (string_slice_split(ss, output, ' ') == 0) {
+    string_slice_to_string(output, &name);
+
+    dynamic_array_add(*pos_args, name);
+    FREE(name);
+    name = NULL;
+  }
+
+  string_slice_destroy(&ss);
+  string_slice_destroy(&output);
+  FREE(pos_args_str);
+
+defer:
+  // if (name != NULL) {
+  //   FREE(name);
+  // }
+
   return result;
 }
 
@@ -485,6 +539,8 @@ static int get_arg_name(char *args_str, unsigned int index, char **name) {
     RETURN_DEFER(result);
   }
 
+  string_slice_destroy(&ss);
+
 defer:
   if (ss != NULL) {
     string_slice_destroy(&ss);
@@ -505,36 +561,19 @@ defer:
  */
 static int parse_positional_argument(argparser *parser, char *args_str,
                                      unsigned short index,
-                                     unsigned int args_num) {
+                                     unsigned int args_num,
+                                     dynamic_array *pos_args) {
   int result = 0;
   argparser_argument *arg = NULL;
-  string_slice *ss = NULL;
-  string_slice *output = NULL;
-  char *pos_args_str = NULL;
   char *name = NULL;
 
-  string_builder_build(parser->positional_args, &pos_args_str);
+  dynamic_array_find_ref(pos_args, args_num - 1, (void **)&name);
 
-  string_slice_create(&ss, pos_args_str, strlen(pos_args_str));
-  string_slice_create(&output, NULL, 0);
-
-  // Remove whitespace at the end.
-  string_slice_trim(ss);
-
-  for (unsigned int i = 0; i < args_num; i++) {
-    if ((string_slice_split(ss, output, ' ')) != 0) {
-      break;
-    }
-  }
-
-  string_slice_to_string(output, &name);
   if (name != NULL) {
     hash_table_search(parser->arguments, name, (void **)&arg);
     index = validate_argument(arg, args_str, index);
     RETURN_DEFER(index);
   }
-
-  string_slice_destroy(&ss);
 
   get_arg_name(args_str, index, &name);
 
@@ -548,26 +587,11 @@ static int parse_positional_argument(argparser *parser, char *args_str,
   if (arg == NULL && name != NULL) {
     string_builder_append(parser->unrecognized_args, name, strlen(name));
     string_builder_append_char(parser->unrecognized_args, ' ');
+    FREE(name);
     RETURN_DEFER(index);
   }
 
 defer:
-  if (ss != NULL) {
-    string_slice_destroy(&ss);
-  }
-
-  if (output != NULL) {
-    string_slice_destroy(&output);
-  }
-
-  if (name != NULL) {
-    FREE(name);
-  }
-
-  if (pos_args_str != NULL) {
-    FREE(pos_args_str);
-  }
-
   return result;
 }
 
@@ -1141,12 +1165,17 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   char *args_str = NULL;
   unsigned int current_pos_count = 0;
   hash_table *flags = NULL;
+  dynamic_array *pos_args = NULL;
 
   if ((result = concat_argv(argc, argv, &args_str)) != 0) {
     RETURN_DEFER(result);
   }
 
   if ((result = separate_opt_args(parser, &flags)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  if ((result = separate_pos_args(parser, &pos_args)) != 0) {
     RETURN_DEFER(result);
   }
 
@@ -1192,7 +1221,8 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
       }
     } else {
       // Positional argument.
-      i = parse_positional_argument(parser, args_str, i, ++current_pos_count);
+      i = parse_positional_argument(parser, args_str, i, ++current_pos_count,
+                                    pos_args);
     }
   }
 
@@ -1207,6 +1237,10 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
 defer:
   if (flags != NULL) {
     hash_table_destroy(&flags);
+  }
+
+  if (pos_args != NULL) {
+    dynamic_array_destroy(&pos_args);
   }
 
   if (args_str != NULL) {
