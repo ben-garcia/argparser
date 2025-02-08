@@ -62,7 +62,6 @@ int dynamic_array_create(dynamic_array **array, unsigned int data_size,
   (*array)->freefn = freefn;
   (*array)->matchfn = matchfn;
   (*array)->items = NULL;
-  (*array)->matchfn = NULL;
   (*array)->size = 0;
 
 defer:
@@ -85,7 +84,7 @@ int dynamic_array_add(dynamic_array *array, const void *item) {
   }
 
   // array can't be empty.
-  if (dynamic_array_is_empty(array)) {
+  if (array->size == 0) {
     array->items = CALLOC(array->capacity, array->data_size);
   }
 
@@ -93,7 +92,7 @@ int dynamic_array_add(dynamic_array *array, const void *item) {
     dynamic_array_resize(&array);
   }
 
-  MEMCPY((void *)array->items + (array->data_size * array->size++), item,
+  MEMCPY((void *)array->items + array->data_size * array->size++, item,
          array->data_size);
 
 defer:
@@ -172,7 +171,7 @@ int dynamic_array_find_ref(dynamic_array *array, unsigned int index,
   }
 
   // Array holds no elements.
-  if (dynamic_array_is_empty(array)) {
+  if (array->size == 0) {
     // LOG_ERROR("dynamic array is empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
@@ -183,7 +182,8 @@ int dynamic_array_find_ref(dynamic_array *array, unsigned int index,
     RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
   }
 
-  *item = array->items + index * array->data_size;
+  // Casting here to get string value. 
+  *item = (void *)array->items + index * array->data_size;
 
 defer:
   return result;
@@ -283,7 +283,8 @@ defer:
 int dynamic_array_iter_next(dynamic_array_iter *it, void **item) {
   int result = STATUS_SUCCESS;
 
-  if (dynamic_array_is_empty((dynamic_array *)it->items)) {
+  // if (dynamic_array_is_empty((dynamic_array *)it->items)) {
+  if (it->size == 0) {
     // LOG_ERROR("dynamic_array cannot be empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
@@ -295,7 +296,8 @@ int dynamic_array_iter_next(dynamic_array_iter *it, void **item) {
 
   it->index++;
 
-  MEMCPY(*item, it->items[it->index], it->data_size);
+  // MEMCPY(*item, it->items[it->index], it->data_size);
+  *item = it->items + (it->index - 1) * it->data_size;
 
 defer:
   return result;
