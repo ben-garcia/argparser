@@ -1160,7 +1160,7 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
       // Optional flag argument.
       while (args_str[i] != ' ' && i < args_length) {
         // Argument flag value cannot conflict with another argument's name.
-        if (strncmp(args_str + i + 2, "--", 2) == 0) {
+        if (i + 2 < args_length && strncmp(args_str + i + 2, "--", 2) == 0) {
           printf("error: argument -%c expected one argument\n", args_str[i]);
           i++;
           break;
