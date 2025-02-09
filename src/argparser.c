@@ -551,6 +551,55 @@ defer:
 }
 
 /**
+ * Verify that argument flag is a valid.
+ *
+ * @param parser argparser
+ * @param flags hash table with flag/long name.
+ * @param flag Argument flag to check.
+ *
+ * @return 0 on success, 1 otherwise.
+ */
+static int is_valid_arg_flag(argparser *parser, hash_table *flags, char flag) {
+  int result = STATUS_FAILURE;
+  char flag_str[3];
+  sprintf(flag_str, "-%c", flag);
+  void *long_name = NULL;
+
+  if (hash_table_search(flags, flag_str, &long_name) == 0 &&
+      strncmp(long_name, "--0", 3) != 0) {
+    if (hash_table_search(parser->arguments, long_name, NULL) == 0) {
+      RETURN_DEFER(STATUS_SUCCESS);
+    }
+  } else {
+    if (hash_table_search(parser->arguments, flag_str, NULL) == 0) {
+      RETURN_DEFER(STATUS_SUCCESS);
+    }
+  }
+
+defer:
+  return result;
+}
+
+/**
+ * Verify that name is a valid argument name.
+ *
+ * @param parser argparser
+ * @param name Argument name to check.
+ *
+ * @return 0 on success, 1 otherwise.
+ */
+static int is_valid_arg_name(argparser *parser, char *name) {
+  int result = STATUS_FAILURE;
+
+  if (hash_table_search(parser->arguments, name, NULL) == 0) {
+    RETURN_DEFER(STATUS_SUCCESS);
+  }
+
+defer:
+  return result;
+}
+
+/**
  * Parse the optional argument.
  *
  * @param parser argparser
@@ -563,8 +612,9 @@ defer:
  * @return how much to move forward.
  */
 static int parse_optional_argument(argparser *parser, char *args_str,
-                                   arg_kind kind, unsigned short index,
-                                   hash_table *flags) {
+                                   arg_kind kind, unsigned int index,
+                                   hash_table *flags,
+                                   unsigned int args_str_length) {
   int result = 0;
   argparser_argument *arg = NULL;
   char *name = NULL;
@@ -574,6 +624,15 @@ static int parse_optional_argument(argparser *parser, char *args_str,
     case ARG_KIND_OPT_FLAG: {
       char concat_str[3];
       sprintf(concat_str, "-%c", args_str[index]);
+
+      // Argument flag value cannot be an argument flag.
+      if (index + 1 < args_str_length &&
+          is_valid_arg_flag(parser, flags, args_str[index]) == 0 &&
+          is_valid_arg_flag(parser, flags, args_str[index + 1]) == 0) {
+        printf("error: argument -%c expected one argument\n",
+               args_str[index++]);
+        RETURN_DEFER(index);
+      }
 
       int found = hash_table_search(flags, concat_str, (void **)&value);
       if (found == 0 && value != NULL && strncmp(value, "--0", 3) != 0) {
@@ -640,23 +699,6 @@ defer:
     FREE(name);
   }
 
-  return result;
-}
-
-/**
- * Verify that name is a valid argument name.
- *
- * @param parser argparser
- * @param name Argument name to check.
- */
-static int is_valid_arg_name(argparser *parser, char *name) {
-  int result = STATUS_FAILURE;
-
-  if (hash_table_search(parser->arguments, name, NULL) == 0) {
-    RETURN_DEFER(STATUS_SUCCESS);
-  }
-
-defer:
   return result;
 }
 
@@ -1154,8 +1196,8 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
 
       FREE(name);
 
-      i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_NAME, i,
-                                  flags);
+      i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_NAME, i, flags,
+                                  args_length);
     } else if (args_str[i] == '-') {
       // Optional flag argument.
       while (args_str[i] != ' ' && i < args_length) {
@@ -1168,10 +1210,10 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
 
         if (args_str[i] == '-') {
           i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_FLAG,
-                                      i + 1, flags);
+                                      i + 1, flags, args_length);
         } else {
           i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_FLAG, i,
-                                      flags);
+                                      flags, args_length);
         }
       }
     } else {
