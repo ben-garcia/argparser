@@ -393,67 +393,22 @@ defer:
  */
 static int validate_argument(argparser_argument *arg, char *args_str,
                              unsigned short index) {
-  int i = index;
-
   switch (arg->action) {
-    case AP_ARG_STORE_APPEND: {
-      string_slice *value_slice = NULL;
-      char *value = NULL;
-
-      if (args_str[i] == ' ') {
-        // Skip whitespace between argument flag and value.
-        i++;
-      }
-
-      string_slice_create(&value_slice, args_str + i, 0);
-
-      while (args_str[i] != ' ') {
-        if (*(args_str + i) == '\0') {
-          // TODO: move logic into seperate function.
-          if (arg->short_name != NULL) {
-            printf("error: argument %s", arg->short_name);
-          }
-          if (arg->short_name && arg->long_name) {
-            printf("/");
-          }
-          if (arg->long_name != NULL) {
-            printf("%s", arg->long_name);
-          }
-          printf(": expected one argument\n");
-          break;
-        }
-
-        // Construct value string.
-        string_slice_advance(&value_slice);
-        i++;
-      }
-
-      string_slice_to_string(value_slice, &value);
-
-      // Create only when it's needed.
-      if (arg->value == NULL && arg->action == AP_ARG_STORE_APPEND) {
-        dynamic_array_create((dynamic_array **)&arg->value, sizeof(char *),
-                             NULL, NULL);
-      }
-
-      dynamic_array_add(arg->value, value);
-
-      string_slice_destroy(&value_slice);
+    case AP_ARG_STORE_APPEND:
       break;
-    }
     case AP_ARG_STORE: {
       string_slice *value_slice = NULL;
       int ss_length = 0;
 
-      if (args_str[i] == ' ') {
+      if (args_str[index] == ' ') {
         // Skip whitespace between argument flag and value.
-        i++;
+        index++;
       }
 
-      string_slice_create(&value_slice, args_str + i, 0);
+      string_slice_create(&value_slice, args_str + index, 0);
 
-      while (args_str[i] != ' ') {
-        if (*(args_str + i) == '\0' && ss_length == 0) {
+      while (args_str[index] != ' ') {
+        if (*(args_str + index) == '\0' && ss_length == 0) {
           // TODO: move logic into seperate function.
           if (arg->short_name != NULL) {
             printf("error: argument %s", arg->short_name);
@@ -468,13 +423,13 @@ static int validate_argument(argparser_argument *arg, char *args_str,
           break;
         }
 
-        if (*(args_str + i) == '\0') {
+        if (*(args_str + index) == '\0') {
           break;
         }
 
         // Construct value string.
         string_slice_advance(&value_slice);
-        i++;
+        index++;
         ss_length++;
       }
 
@@ -502,7 +457,7 @@ static int validate_argument(argparser_argument *arg, char *args_str,
       break;
   }
 
-  return i;
+  return index;
 }
 
 /**
