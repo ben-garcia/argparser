@@ -765,12 +765,12 @@ static int print_errors(argparser *parser) {
   int result = STATUS_SUCCESS;
   dynamic_array_iter *it = NULL;
 
-  if ((result = dynamic_array_iter_create(&it, parser->errors) != 0)) {
-    RETURN_DEFER(result);
-  }
-
   if (parser->errors != NULL) {
     char *message = NULL;
+
+    if ((result = dynamic_array_iter_create(&it, parser->errors) != 0)) {
+      RETURN_DEFER(result);
+    }
 
     while (dynamic_array_iter_next_str(it, &message) == 0) {
       LOG_ERROR("%s", message);
