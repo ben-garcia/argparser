@@ -209,20 +209,6 @@ static int determine_argument(char short_name[2], char *long_name) {
   }
   LOG_ERROR("UNKNOWN arg error (%s:%s)", short_name, long_name);
   return -6;
-
-  // // Default prefix character
-  // if (parser->prefix_chars == NULL) {
-  //   // For positional argument.
-  //   if (short_name == NULL && (strncmp(long_name, "--", 2) != 0)) {
-  //     // For optional argument.
-  //   } else if (short_length == 2 && (strncmp(short_name, "-", 1) == 0) &&
-  //              isalpha(short_name[1]) && (strncmp(long_name, "--", 2) !=
-  //              0))
-  //              {
-  //   }
-  // } else {
-  //   // Custom prefix character(s)
-  // }
 }
 
 /**
@@ -413,7 +399,7 @@ static int add_error_to_parser(argparser *parser, argparser_argument *arg,
   if (arg != NULL && flag_or_name == NULL) {
     // Use argument to format error message.
     if (arg->short_name != NULL) {
-      string_builder_append_fmtstr(sb, "error: argument %s", arg->short_name);
+      string_builder_append_fmtstr(sb, "argument %s", arg->short_name);
     }
 
     if (arg->short_name != NULL && arg->long_name != NULL) {
@@ -428,12 +414,12 @@ static int add_error_to_parser(argparser *parser, argparser_argument *arg,
 
   } else if (arg == NULL && flag_or_name != NULL && opt_type == 1) {
     // Use argument flag to format error message.
-    string_builder_append_fmtstr(
-        sb, "error: argument -%c expected one argument", flag_or_name[0]);
+    string_builder_append_fmtstr(sb, "argument -%c expected one argument",
+                                 flag_or_name[0]);
   } else if (arg == NULL && flag_or_name != NULL && opt_type == 2) {
     // Use argument name to format error message.
-    string_builder_append_fmtstr(
-        sb, "error: argument %s expected one argument\n", flag_or_name);
+    string_builder_append_fmtstr(sb, "argument %s expected one argument\n",
+                                 flag_or_name);
   }
 
   string_builder_build(sb, &message);
@@ -761,6 +747,51 @@ static int parse_optional_argument(argparser *parser, char *args_str,
 defer:
   if (name != NULL) {
     FREE(name);
+  }
+
+  return result;
+}
+
+/**
+ * Print both argument and unrecognized argument errors.
+ *
+ * @param parser argparser
+ *
+ * @return 0 on success,
+ *         1 indicates failure to build string,
+ *         2 indicates memory allocation failed.
+ */
+static int print_errors(argparser *parser) {
+  int result = STATUS_SUCCESS;
+  dynamic_array_iter *it = NULL;
+
+  if ((result = dynamic_array_iter_create(&it, parser->errors) != 0)) {
+    RETURN_DEFER(result);
+  }
+
+  if (parser->errors != NULL) {
+    char *message = NULL;
+
+    while (dynamic_array_iter_next_str(it, &message) == 0) {
+      LOG_ERROR("%s", message);
+    }
+  }
+
+  if (parser->unrecognized_args != NULL) {
+    char *args = NULL;
+
+    if ((result = string_builder_build(parser->unrecognized_args, &args)) !=
+        0) {
+      RETURN_DEFER(result);
+    }
+
+    LOG_ERROR("unrecognized argument(s): %s", args);
+    FREE(args);
+  }
+
+defer:
+  if (it != NULL) {
+    dynamic_array_iter_destroy(&it);
   }
 
   return result;
@@ -1288,12 +1319,8 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
     }
   }
 
-  if (parser->unrecognized_args != NULL) {
-    char *args = NULL;
-
-    string_builder_build(parser->unrecognized_args, &args);
-    LOG_ERROR("unrecognized argument(s): %s", args);
-    FREE(args);
+  if (parser->errors != NULL || parser->unrecognized_args != NULL) {
+    print_errors(parser);
   }
 
 defer:
