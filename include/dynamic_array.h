@@ -157,6 +157,20 @@ int dynamic_array_iter_create(dynamic_array_iter **it, dynamic_array *array);
 int dynamic_array_iter_next(dynamic_array_iter *it, void **item);
 
 /**
+ * Get the next string of the dynamic array
+ *
+ * @param it dynamic array iterator
+ * @param item value used to hold the next elmeent in the array.
+ *
+ * @return 0 on success,
+ *         1 indicates no more entries,
+ *         3 indicates iterator is empty,
+ *         4 indicates iterator is out of bounds,
+ *         5 indicates dynamic array is NULL.
+ */
+int dynamic_array_iter_next_str(dynamic_array_iter *it, char **item);
+
+/**
  * Reset the dynamic array iterator.
  *
  * @param it dynamic array iterator

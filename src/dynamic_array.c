@@ -324,10 +324,28 @@ int dynamic_array_iter_next(dynamic_array_iter *it, void **item) {
     RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
   }
 
-  it->index++;
+  // NOTE: A reference is returned.
+  *item = it->items + (it->index++) * it->data_size;
 
-  // MEMCPY(*item, it->items[it->index], it->data_size);
-  *item = it->items + (it->index - 1) * it->data_size;
+defer:
+  return result;
+}
+
+int dynamic_array_iter_next_str(dynamic_array_iter *it, char **item) {
+  int result = STATUS_SUCCESS;
+
+  if (it->size == 0) {
+    // LOG_ERROR("dynamic_array cannot be empty");
+    RETURN_DEFER(STATUS_IS_EMPTY);
+  }
+
+  if (it->index >= it->size) {
+    // LOG_ERROR("index is out of bounds");
+    RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
+  }
+
+  // NOTE: A reference is returned.
+  *item = it->items[it->index++];
 
 defer:
   return result;
