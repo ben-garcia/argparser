@@ -97,6 +97,7 @@ struct argparser {
                                       // be passed in.
   string_builder *unrecognized_args;  // Arguments that don't match the
                                       // parser arguments.
+  dynamic_array *errors;              // Argument errors. Array of char*.
   char *name;                         // Program name(default is argv[0])
   char *usage;                        // Describing program usage.
   char *description;           // Text to display before argument help message.
@@ -375,9 +376,83 @@ static int separate_pos_args(argparser *parser, dynamic_array **pos_args) {
   FREE(pos_args_str);
 
 defer:
-  // if (name != NULL) {
-  //   FREE(name);
-  // }
+  return result;
+}
+
+/**
+ * Deallocate memory for string.
+ */
+static void destroy_str(void **str) {
+  FREE(str);
+  str = NULL;
+}
+
+/**
+ * Append error message to parser errors array.
+ *
+ * @param parser argparser
+ * @param arg argparser_argument
+ * @param flag_or_name
+ * @param opt_type number indicating the argument type,
+ *                 0 for no argument type,
+ *                 1 for argument flag,
+ *                 2 for argument name.
+ *
+ * @return 0 on success, 2 indicates memory allocation failed.
+ */
+static int add_error_to_parser(argparser *parser, argparser_argument *arg,
+                               char *flag_or_name, unsigned int opt_type) {
+  int result = STATUS_SUCCESS;
+  string_builder *sb = NULL;
+  char *message = NULL;
+
+  if ((result = string_builder_create(&sb)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  if (arg != NULL && flag_or_name == NULL) {
+    // Use argument to format error message.
+    if (arg->short_name != NULL) {
+      string_builder_append_fmtstr(sb, "error: argument %s", arg->short_name);
+    }
+
+    if (arg->short_name != NULL && arg->long_name != NULL) {
+      string_builder_append_char(sb, '/');
+    }
+
+    if (arg->long_name != NULL) {
+      string_builder_append(sb, arg->long_name, strlen(arg->long_name));
+    }
+
+    string_builder_append(sb, " expected one argument", 21);
+
+  } else if (arg == NULL && flag_or_name != NULL && opt_type == 1) {
+    // Use argument flag to format error message.
+    string_builder_append_fmtstr(
+        sb, "error: argument -%c expected one argument", flag_or_name[0]);
+  } else if (arg == NULL && flag_or_name != NULL && opt_type == 2) {
+    // Use argument name to format error message.
+    string_builder_append_fmtstr(
+        sb, "error: argument %s expected one argument\n", flag_or_name);
+  }
+
+  string_builder_build(sb, &message);
+
+  if (parser->errors == NULL) {
+    if (dynamic_array_create(&parser->errors, sizeof(char *), destroy_str,
+                             NULL) != 0) {
+      RETURN_DEFER(result);
+    }
+  }
+
+  if (dynamic_array_add_str(parser->errors, message) != 0) {
+    RETURN_DEFER(result);
+  }
+
+defer:
+  if (sb != NULL) {
+    string_builder_destroy(&sb);
+  }
 
   return result;
 }
@@ -391,8 +466,8 @@ defer:
  *
  * @return how much to move forward.
  */
-static int validate_argument(argparser_argument *arg, char *args_str,
-                             unsigned short index) {
+static int validate_argument(argparser *parser, argparser_argument *arg,
+                             char *args_str, unsigned short index) {
   switch (arg->action) {
     case AP_ARG_STORE_APPEND:
       break;
@@ -409,17 +484,7 @@ static int validate_argument(argparser_argument *arg, char *args_str,
 
       while (args_str[index] != ' ') {
         if (*(args_str + index) == '\0' && ss_length == 0) {
-          // TODO: move logic into seperate function.
-          if (arg->short_name != NULL) {
-            printf("error: argument %s", arg->short_name);
-          }
-          if (arg->short_name && arg->long_name) {
-            printf("/");
-          }
-          if (arg->long_name != NULL) {
-            printf("%s", arg->long_name);
-          }
-          printf(": expected one argument\n");
+          add_error_to_parser(parser, arg, NULL, 0);
           break;
         }
 
@@ -526,7 +591,7 @@ static int parse_positional_argument(argparser *parser, char *args_str,
 
   if (name != NULL) {
     hash_table_search(parser->arguments, name, (void **)&arg);
-    index = validate_argument(arg, args_str, index);
+    index = validate_argument(parser, arg, args_str, index);
     RETURN_DEFER(index);
   }
 
@@ -629,8 +694,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
       if (index + 1 < args_str_length &&
           is_valid_arg_flag(parser, flags, args_str[index]) == 0 &&
           is_valid_arg_flag(parser, flags, args_str[index + 1]) == 0) {
-        printf("error: argument -%c expected one argument\n",
-               args_str[index++]);
+        add_error_to_parser(parser, NULL, args_str + index++, 1);
         RETURN_DEFER(index);
       }
 
@@ -638,12 +702,12 @@ static int parse_optional_argument(argparser *parser, char *args_str,
       if (found == 0 && value != NULL && strncmp(value, "--0", 3) != 0) {
         // use name as key to access argument.
         hash_table_search(parser->arguments, value, (void **)&arg);
-        index = validate_argument(arg, args_str, index + 1);
+        index = validate_argument(parser, arg, args_str, index + 1);
         RETURN_DEFER(index);
       } else if (found == 0 && strncmp(value, "--0", 3) == 0) {
         // use flag as key to access argument.
         hash_table_search(parser->arguments, concat_str, (void **)&arg);
-        index = validate_argument(arg, args_str, index + 1);
+        index = validate_argument(parser, arg, args_str, index + 1);
         RETURN_DEFER(index);
       }
 
@@ -663,7 +727,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
     }
     case ARG_KIND_OPT_NAME: {
       if (get_arg_name(args_str, index, &name) == STATUS_OUT_OF_BOUNDS) {
-        printf("error: argument %s expected one argument\n", name);
+        add_error_to_parser(parser, NULL, name, 2);
         RETURN_DEFER(strlen(args_str));
       }
 
@@ -671,7 +735,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
 
       if (hash_table_search(parser->arguments, name, (void **)&arg) == 0) {
         // use name as key to access argument.
-        index = validate_argument(arg, args_str, index + name_length);
+        index = validate_argument(parser, arg, args_str, index + name_length);
         RETURN_DEFER(index);
       }
 
@@ -738,6 +802,7 @@ int argparser_create(argparser **parser) {
   (*parser)->pos_args_size = 0;
   (*parser)->req_opt_args_size = 0;
   (*parser)->unrecognized_args = NULL;
+  (*parser)->errors = NULL;
 
 defer:
   return result;
@@ -1188,7 +1253,7 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
           i + name_length + 1 < args_length &&
           args_str[i + name_length + 1] == '-') {
         // Argument name value cannot conflict with another argument flag.
-        printf("error: argument %s expected one argument\n", name);
+        add_error_to_parser(parser, NULL, name, 2);
         i += name_length;
         FREE(name);
         continue;
@@ -1203,7 +1268,7 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
       while (args_str[i] != ' ' && i < args_length) {
         // Argument flag value cannot conflict with another argument's name.
         if (i + 2 < args_length && strncmp(args_str + i + 2, "--", 2) == 0) {
-          printf("error: argument -%c expected one argument\n", args_str[i]);
+          add_error_to_parser(parser, NULL, args_str + i, 1);
           i++;
           break;
         }
@@ -1256,6 +1321,10 @@ void argparser_destroy(argparser **parser) {
 
     if ((*parser)->unrecognized_args != NULL) {
       string_builder_destroy(&(*parser)->unrecognized_args);
+    }
+
+    if ((*parser)->errors != NULL) {
+      dynamic_array_destroy(&(*parser)->errors);
     }
 
     FREE(*parser);
