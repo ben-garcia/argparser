@@ -29,6 +29,20 @@ int dynamic_array_create(dynamic_array **array, unsigned int data_size,
 int dynamic_array_add(dynamic_array *array, const void *item);
 
 /**
+ * Add a new string to the array.
+ *
+ * NOTE: This is not ideal. I would like to have a single add function.
+ *       However, add function uses memcpy while strcpy is necessary for
+ *       strings.
+ *
+ * @param array dynamic_array to modify.
+ * @param str the string to add.
+ *
+ * @return 0 on success, 5 indicates array or item is NULL.
+ */
+int dynamic_array_add_str(dynamic_array *array, const char *str);
+
+/**
  * Add a multiple elements to the array.
  *
  * @param array dynamic_array to modify.
@@ -66,7 +80,7 @@ int dynrmic_array_find(dynamic_array *array, unsigned int index, void **item);
  *         5 indicates array or item is NULL,
  */
 int dynamic_array_find_ref(dynamic_array *array, unsigned int index,
-                          void **item);
+                           void **item);
 
 /**
  * Retrive the number of elements in the array.

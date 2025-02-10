@@ -99,6 +99,36 @@ defer:
   return result;
 }
 
+int dynamic_array_add_str(dynamic_array *array, const char *str) {
+  int result = STATUS_SUCCESS;
+
+  // array must be defined.
+  if (array == NULL) {
+    // LOG_ERROR("dynamic array must not be NULL");
+    RETURN_DEFER(STATUS_IS_NULL);
+  }
+
+  // item must be defined.
+  if (str == NULL) {
+    // LOG_ERROR("item array must not be NULL");
+    RETURN_DEFER(STATUS_IS_NULL);
+  }
+
+  // array can't be empty.
+  if (array->size == 0) {
+    array->items = CALLOC(array->capacity, array->data_size);
+  }
+
+  if (array->size == array->capacity) {
+    dynamic_array_resize(&array);
+  }
+
+  array->items[array->size++] = (void *)str;
+
+defer:
+  return result;
+}
+
 int dynamic_array_add_many(dynamic_array *array, void **items,
                            unsigned int length) {
   int result = STATUS_SUCCESS;
@@ -182,7 +212,7 @@ int dynamic_array_find_ref(dynamic_array *array, unsigned int index,
     RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
   }
 
-  // Casting here to get string value. 
+  // Casting here to get string value.
   *item = (void *)array->items + index * array->data_size;
 
 defer:
@@ -250,8 +280,8 @@ defer:
 
 void dynamic_array_destroy(dynamic_array **array) {
   if (*array != NULL) {
-    for (unsigned int i = 0; i < (*array)->size; i++) {
-      if ((*array)->freefn != NULL) {
+    if ((*array)->freefn != NULL) {
+      for (unsigned int i = 0; i < (*array)->size; i++) {
         (*array)->freefn((*array)->items[i]);
       }
     }
