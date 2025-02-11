@@ -733,7 +733,8 @@ static int parse_optional_argument(argparser *parser, char *args_str,
       if (arg == NULL) {
         string_builder_append(parser->unrecognized_args, name, name_length);
         string_builder_append_char(parser->unrecognized_args, ' ');
-        index += name_length - 2;  // exclude double dashes(--)
+        // index += name_length - 2;  // exclude double dashes(--)
+        index += name_length;
         RETURN_DEFER(index);
       }
 
@@ -1297,9 +1298,35 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
     } else if (args_str[i] == '-') {
       // Optional flag argument.
       while (args_str[i] != ' ' && i < args_length) {
-        // Argument flag value cannot conflict with another argument's name.
         if (i + 2 < args_length && strncmp(args_str + i + 2, "--", 2) == 0) {
-          add_error_to_parser(parser, NULL, args_str + i, 1);
+          // Argument flag value cannot conflict with another argument's name.
+          // example, '-a--name'
+          add_error_to_parser(parser, NULL, args_str + i + 1, 1);
+          i++;
+          break;
+        } else if (i + 3 < args_length &&
+                   strncmp(args_str + i + 3, "--", 2) == 0) {
+          // Same as above but seperated by a space.
+          // example, '-a --name'
+          add_error_to_parser(parser, NULL, args_str + i + 1, 1);
+          i++;
+          break;
+        } else if (i + 2 < args_length &&
+                   strncmp(args_str + i + 2, "--", 2) != 0 &&
+                   args_str[i + 2] == '-' &&
+                   is_valid_arg_flag(parser, flags, args_str[i + 1]) == 0) {
+          // Argument flag value cannot conflict with another argument's flag.
+          // example, '-a-b'
+          add_error_to_parser(parser, NULL, args_str + i + 1, 1);
+          i++;
+          break;
+        } else if (i + 3 < args_length &&
+                   strncmp(args_str + i + 3, "--", 2) != 0 &&
+                   args_str[i + 3] == '-' &&
+                   is_valid_arg_flag(parser, flags, args_str[i + 1]) == 0) {
+          // Argument flag value cannot conflict with another argument's flag.
+          // example, '-a -b'
+          add_error_to_parser(parser, NULL, args_str + i + 1, 1);
           i++;
           break;
         }
