@@ -762,7 +762,8 @@ defer:
  *         1 indicates failure to build string,
  *         2 indicates memory allocation failed.
  */
-static int print_errors(argparser *parser) {
+static int print_errors(argparser *parser, dynamic_array *pos_args,
+                        unsigned int current_pos_count) {
   int result = STATUS_SUCCESS;
   dynamic_array_iter *it = NULL;
 
@@ -788,6 +789,38 @@ static int print_errors(argparser *parser) {
 
     LOG_ERROR("unrecognized argument(s): %s", args);
     FREE(args);
+  }
+
+  if (current_pos_count < parser->pos_args_size) {
+    // Missing positional argument.
+    string_builder *sb = NULL;
+    char *message = NULL;
+
+    string_builder_create(&sb);
+
+    string_builder_append(
+        sb, "error: the following argument(s) are required: ", 47);
+
+    if (current_pos_count == 0) {
+      char *str = NULL;
+      string_builder_build(parser->positional_args, &str);
+      string_builder_append(sb, str, strlen(str));
+      FREE(str);
+    } else {
+      for (unsigned int i = current_pos_count; i < parser->pos_args_size; i++) {
+        char *arg = NULL;
+
+        dynamic_array_find_ref(pos_args, i - 1, (void **)&arg);
+        string_builder_append(sb, arg, strlen(arg));
+      }
+    }
+
+    string_builder_build(sb, &message);
+
+    LOG_ERROR("%s", message);
+
+    string_builder_destroy(&sb);
+    FREE(message);
   }
 
 defer:
@@ -1346,8 +1379,9 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
     }
   }
 
-  if (parser->errors != NULL || parser->unrecognized_args != NULL) {
-    print_errors(parser);
+  if (parser->errors != NULL || parser->unrecognized_args != NULL ||
+      current_pos_count < parser->pos_args_size) {
+    print_errors(parser, pos_args, current_pos_count);
   }
 
 defer:
