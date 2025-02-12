@@ -19,22 +19,20 @@ enum status_codes {
 #define TERMINAL_YELLOW "\033[33m"
 #define TERMINAL_RESET "\033[0m"
 
-#define LOG_ERROR(format, ...)                                                 \
-  fprintf(stderr, TERMINAL_RED "error" TERMINAL_RESET ": %s:%d: " format "\n", \
-          __FILE__, __LINE__, ##__VA_ARGS__)
-
-#define LOG_WARN(format, ...)                                               \
-  fprintf(stderr,                                                           \
-          TERMINAL_YELLOW "warning" TERMINAL_RESET ": %s:%d: " format "\n", \
-          __FILE__, __LINE__, ##__VA_ARGS__)
-
-#define LOG_INFO(format, ...)                                                  \
-  fprintf(stderr, TERMINAL_BLUE "info" TERMINAL_RESET ": %s:%d: " format "\n", \
-          __FILE__, __LINE__, ##__VA_ARGS__)
-
-#define LOG_DEBUG(format, ...)                                      \
-  fprintf(stderr, "debug: %s:%d: " format "\n", __FILE__, __LINE__, \
+#define LOG_ERROR(format, ...)                                          \
+  fprintf(stderr, TERMINAL_RED "error" TERMINAL_RESET ": " format "\n", \
           ##__VA_ARGS__)
+
+#define LOG_WARN(format, ...)                                                \
+  fprintf(stderr, TERMINAL_YELLOW "warning" TERMINAL_RESET ": " format "\n", \
+          ##__VA_ARGS__)
+
+#define LOG_INFO(format, ...)                                           \
+  fprintf(stderr, TERMINAL_BLUE "info" TERMINAL_RESET ": " format "\n", \
+          ##__VA_ARGS__)
+
+#define LOG_DEBUG(format, ...) \
+  fprintf(stderr, "debug: " format "\n", ##__VA_ARGS__)
 
 #define RETURN_DEFER(s) \
   do {                  \

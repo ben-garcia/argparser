@@ -799,7 +799,7 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
     string_builder_create(&sb);
 
     string_builder_append(
-        sb, "error: the following argument(s) are required: ", 47);
+        sb, "the following argument(s) are required: ", 40);
 
     if (current_pos_count == 0) {
       char *str = NULL;
