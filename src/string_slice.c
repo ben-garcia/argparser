@@ -11,7 +11,6 @@ int string_slice_create(string_slice **ss, char *str, unsigned int length) {
   int result = STATUS_SUCCESS;
 
   if ((*ss = MALLOC(sizeof(string_slice))) == NULL) {
-    LOG_ERROR("failed to allocated memory for string slice");
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
   (*ss)->string = str;
@@ -119,7 +118,6 @@ int string_slice_to_string(string_slice *ss, char **str) {
   }
 
   if (((*str) = MALLOC(ss->length + 1)) == NULL) {
-    LOG_ERROR("failed ot allocate memory for 'str'");
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 

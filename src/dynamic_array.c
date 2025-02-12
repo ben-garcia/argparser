@@ -34,7 +34,6 @@ static int dynamic_array_resize(dynamic_array **array) {
   if (((*array)->items =
            REALLOC((*array)->items,
                    (*array)->data_size * ((*array)->capacity <<= 1))) == NULL) {
-    // LOG_ERROR("failed to resize dynamic array");
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -53,7 +52,6 @@ int dynamic_array_create(dynamic_array **array, unsigned int data_size,
   int result = STATUS_SUCCESS;
 
   if ((*array = MALLOC(sizeof(dynamic_array))) == NULL) {
-    // LOG_ERROR("failed to allocated memory for dynamic array");
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -73,13 +71,11 @@ int dynamic_array_add(dynamic_array *array, const void *item) {
 
   // array must be defined.
   if (array == NULL) {
-    // LOG_ERROR("dynamic array must not be NULL");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   // item must be defined.
   if (item == NULL) {
-    // LOG_ERROR("item array must not be NULL");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
@@ -104,13 +100,11 @@ int dynamic_array_add_str(dynamic_array *array, const char *str) {
 
   // array must be defined.
   if (array == NULL) {
-    // LOG_ERROR("dynamic array must not be NULL");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   // item must be defined.
   if (str == NULL) {
-    // LOG_ERROR("item array must not be NULL");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
@@ -135,13 +129,11 @@ int dynamic_array_add_many(dynamic_array *array, void **items,
 
   // array must be defined.
   if (array == NULL) {
-    // LOG_ERROR("dynamic array must not be NULL");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   // item must be defined.
   if ((*items) == NULL) {
-    // LOG_ERROR("new items array must not be NULL");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
@@ -168,19 +160,16 @@ int dynamic_array_find(dynamic_array *array, unsigned int index, void **item) {
 
   // array must be defined.
   if (array == NULL) {
-    // LOG_ERROR("dynamic array is NULL");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   // Array holds no elements.
   if (dynamic_array_is_empty(array)) {
-    // LOG_ERROR("dynamic array is empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
   // Index out of bounds.
   if (index >= array->size) {
-    // LOG_ERROR("index is out of bounds");
     RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
   }
 
@@ -196,19 +185,16 @@ int dynamic_array_find_ref(dynamic_array *array, unsigned int index,
 
   // array must be defined.
   if (array == NULL) {
-    // LOG_ERROR("dynamic array is NULL");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   // Array holds no elements.
   if (array->size == 0) {
-    // LOG_ERROR("dynamic array is empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
   // Index out of bounds.
   if (index >= array->size) {
-    // LOG_ERROR("index is out of bounds");
     RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
   }
 
@@ -233,19 +219,16 @@ int dynamic_array_remove(dynamic_array *array, unsigned int index) {
 
   // array must be defined.
   if (array == NULL) {
-    // LOG_ERROR("dynamic array is NULL");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   // array can't be empty.
   if (dynamic_array_is_empty(array)) {
-    // LOG_ERROR("dynamic array is empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
   // Index out of bounds.
   if (index >= array->size) {
-    // LOG_ERROR("index is out of bounds");
     RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
   }
 
@@ -262,7 +245,6 @@ int dynamic_array_shrink_to_fit(dynamic_array *array) {
 
   // Array must be defined.
   if (array == NULL) {
-    // LOG_ERROR("dynamic array must not be NULL");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
@@ -297,7 +279,6 @@ int dynamic_array_iter_create(dynamic_array_iter **it, dynamic_array *array) {
   int result = STATUS_SUCCESS;
 
   if ((*it = MALLOC(sizeof(dynamic_array_iter))) == NULL) {
-    // LOG_ERROR("failed to allocated memory for dynamic array iterator");
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -315,12 +296,10 @@ int dynamic_array_iter_next(dynamic_array_iter *it, void **item) {
 
   // if (dynamic_array_is_empty((dynamic_array *)it->items)) {
   if (it->size == 0) {
-    // LOG_ERROR("dynamic_array cannot be empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
   if (it->index >= it->size) {
-    // LOG_ERROR("index is out of bounds");
     RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
   }
 
@@ -335,12 +314,10 @@ int dynamic_array_iter_next_str(dynamic_array_iter *it, char **item) {
   int result = STATUS_SUCCESS;
 
   if (it->size == 0) {
-    // LOG_ERROR("dynamic_array cannot be empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
   if (it->index >= it->size) {
-    // LOG_ERROR("index is out of bounds");
     RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
   }
 

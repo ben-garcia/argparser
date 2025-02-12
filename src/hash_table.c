@@ -127,7 +127,6 @@ int hash_table_create(hash_table **ht, unsigned int data_size,
   int result = STATUS_SUCCESS;
 
   if ((*ht = MALLOC(sizeof(hash_table))) == NULL) {
-    // LOG_ERROR("failed to allocated memory for hash table");
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -153,7 +152,6 @@ int hash_table_insert(hash_table *ht, const char *key, const void *value) {
   int result = STATUS_SUCCESS;
 
   if (ht == NULL) {
-    // LOG_ERROR("hash table has not been created.");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
@@ -208,7 +206,6 @@ int hash_table_insert_and_replace(hash_table *ht, const char *key,
   int result = STATUS_SUCCESS;
 
   if (ht == NULL) {
-    // LOG_ERROR("hash table is has not been created.");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
@@ -264,12 +261,10 @@ int hash_table_search(hash_table *ht, const char *key, void **value) {
   int result = STATUS_SUCCESS;
 
   if (ht == NULL) {
-    // LOG_ERROR("hash table is has not been created.");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   if (ht->size == 0) {
-    // LOG_ERROR("hash table is empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
@@ -305,12 +300,10 @@ int hash_table_delete(hash_table *ht, const char *key) {
   int result = STATUS_SUCCESS;
 
   if (ht == NULL) {
-    // LOG_ERROR("hash table has not been created.");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   if (ht->size == 0) {
-    LOG_ERROR("hash table is empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
@@ -376,16 +369,13 @@ int hash_table_iter_create(hash_table_iter **it, hash_table *ht) {
   int result = STATUS_SUCCESS;
 
   if (ht == NULL) {
-    // LOG_ERROR("hash table has not been created.");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   if (ht->size == 0) {
-    // LOG_ERROR("hash table is empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
   if (((*it) = MALLOC(sizeof(hash_table_iter))) == NULL) {
-    // LOG_ERROR("failed to allocated memory for hash_table_iter");
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -402,12 +392,10 @@ int hash_table_iter_next(hash_table_iter *it, hash_table_entry **entry) {
   int result = STATUS_SUCCESS;
 
   if (it == NULL) {
-    // LOG_ERROR("hash table iterator has not been created.");
     RETURN_DEFER(STATUS_IS_NULL);
   }
 
   if (it->size == 0) {
-    // LOG_ERROR("hash table iter is empty");
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 

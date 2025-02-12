@@ -175,25 +175,19 @@ static void arg_destroy(void **arg) {
  */
 static int determine_argument(char short_name[2], char *long_name) {
   if (short_name == NULL && long_name == NULL) {
-    // LOG_ERROR("both are NULL (%s:%s)", short_name, long_name);
     return -1;
   } else if (short_name == NULL && (strncmp(long_name, "--", 2) != 0) &&
              long_name[0] != '-') {
-    // For positional argument.
     return 1;
   } else if (short_name == NULL && (strncmp(long_name, "--", 2) == 0)) {
     return 3;
   } else if (short_name == NULL && long_name[0] == '-') {
-    // LOG_ERROR("positional arg cannot begin with dash (-) (%s:%s)",
-    // short_name,
-    //          long_name);
     return -4;
   }
 
   int short_length = strlen(short_name);
 
   if (short_length != 2 || short_name[0] != '-' || !isalpha(short_name[1])) {
-    // LOG_ERROR("invalid optional arg(%s:%s)", short_name, long_name);
     return -2;
   } else if (short_length == 2 && long_name == NULL) {
     // For optional argument with short_name as key.
@@ -203,8 +197,6 @@ static int determine_argument(char short_name[2], char *long_name) {
     return 3;
   } else if (short_name[0] == '-' && isalpha(short_name[1]) &&
              long_name[0] != '-' && strncmp(long_name, "--", 2) != 0) {
-    /// LOG_ERROR("cannot mix positional and optional args (%s:%s)", short_name,
-    //              long_name);
     return -5;
   }
   LOG_ERROR("UNKNOWN arg error (%s:%s)", short_name, long_name);
@@ -798,8 +790,7 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
 
     string_builder_create(&sb);
 
-    string_builder_append(
-        sb, "the following argument(s) are required: ", 40);
+    string_builder_append(sb, "the following argument(s) are required: ", 40);
 
     if (current_pos_count == 0) {
       char *str = NULL;
@@ -835,7 +826,6 @@ int argparser_create(argparser **parser) {
   int result = STATUS_SUCCESS;
 
   if ((*parser = MALLOC(sizeof(argparser))) == NULL) {
-    LOG_ERROR("failed to allocated memory for argparser");
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
