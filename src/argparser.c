@@ -313,6 +313,14 @@ defer:
 }
 
 /**
+ * Deallocate memory for string.
+ */
+static void destroy_str(void **str) {
+  FREE(str);
+  str = NULL;
+}
+
+/**
  * Add positional arguments to dynamic array.
  *
  * @param parser argparser
@@ -323,7 +331,8 @@ defer:
 static int separate_pos_args(argparser *parser, dynamic_array **pos_args) {
   int result = STATUS_SUCCESS;
 
-  if ((result = dynamic_array_create(pos_args, sizeof(char *), NULL, NULL))) {
+  if ((result =
+           dynamic_array_create(pos_args, sizeof(char *), destroy_str, NULL))) {
     RETURN_DEFER(result);
   }
 
@@ -344,9 +353,9 @@ static int separate_pos_args(argparser *parser, dynamic_array **pos_args) {
   while (string_slice_split(ss, output, ' ') == 0) {
     string_slice_to_string(output, &name);
 
-    dynamic_array_add(*pos_args, name);
-    FREE(name);
-    name = NULL;
+    dynamic_array_add_str(*pos_args, name);
+    // FREE(name);
+    // name = NULL;
   }
 
   string_slice_destroy(&ss);
@@ -355,14 +364,6 @@ static int separate_pos_args(argparser *parser, dynamic_array **pos_args) {
 
 defer:
   return result;
-}
-
-/**
- * Deallocate memory for string.
- */
-static void destroy_str(void **str) {
-  FREE(str);
-  str = NULL;
 }
 
 /**
@@ -565,7 +566,7 @@ static int parse_positional_argument(argparser *parser, char *args_str,
   argparser_argument *arg = NULL;
   char *name = NULL;
 
-  dynamic_array_find_ref(pos_args, args_num - 1, (void **)&name);
+  dynamic_array_find_ref_str(pos_args, args_num - 1, (void **)&name);
 
   if (name != NULL) {
     hash_table_search(parser->arguments, name, (void **)&arg);
