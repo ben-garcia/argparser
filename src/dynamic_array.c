@@ -179,6 +179,7 @@ defer:
   return result;
 }
 
+
 int dynamic_array_find_ref(dynamic_array *array, unsigned int index,
                            void **item) {
   int result = STATUS_SUCCESS;
@@ -198,8 +199,32 @@ int dynamic_array_find_ref(dynamic_array *array, unsigned int index,
     RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
   }
 
-  // Casting here to get string value.
   *item = (void *)array->items + index * array->data_size;
+
+defer:
+  return result;
+}
+
+int dynamic_array_find_ref_str(dynamic_array *array, unsigned int index,
+                           void **str) {
+  int result = STATUS_SUCCESS;
+
+  // array must be defined.
+  if (array == NULL) {
+    RETURN_DEFER(STATUS_IS_NULL);
+  }
+
+  // Array holds no elements.
+  if (dynamic_array_is_empty(array)) {
+    RETURN_DEFER(STATUS_IS_EMPTY);
+  }
+
+  // Index out of bounds.
+  if (index >= array->size) {
+    RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
+  }
+
+  *str = array->items[index];
 
 defer:
   return result;

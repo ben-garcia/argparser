@@ -66,10 +66,10 @@ int dynamic_array_add_many(dynamic_array *array, void **items,
  *         5 indicates array or item is NULL,
  *         5 indicates array is NULL.
  */
-int dynrmic_array_find(dynamic_array *array, unsigned int index, void **item);
+int dynamic_array_find(dynamic_array *array, unsigned int index, void **item);
 
 /**
- * Get the reference to the element at a given index.
+ * Get a reference to the element at a given index.
  *
  * @param array dynamic_array to modify.
  * @param index Index to access.
@@ -81,6 +81,21 @@ int dynrmic_array_find(dynamic_array *array, unsigned int index, void **item);
  */
 int dynamic_array_find_ref(dynamic_array *array, unsigned int index,
                            void **item);
+
+/**
+ * Get a reference to string value at a given index.
+ *
+ * @param array dynamic_array to modify.
+ * @param index Index to access.
+ * @param item Where to store the value.
+ *
+ * @return 0 on success,
+ *         3 indicates array is empty,
+ *         5 indicates array or item is NULL,
+ *         5 indicates array is NULL.
+ */
+int dynamic_array_find_ref_str(dynamic_array *array, unsigned int index,
+                               void **str);
 
 /**
  * Retrive the number of elements in the array.
