@@ -39,7 +39,8 @@ int main(int argc, char *argv[]) {
   argparser_add_const_value_to_arg(parser, ARG_LONG_FORCE, "CV");
   argparser_add_choices_to_arg(parser, ARG_LONG_FORCE, "0,1");
 
-  argparser_add_argument(parser, ARG_SHORT_HELP, ARG_LONG_HELP);     // valid
+  argparser_add_argument(parser, ARG_SHORT_HELP, ARG_LONG_HELP);  // valid
+  argparser_add_type_to_arg(parser, ARG_LONG_HELP, AP_ARG_FLOAT);
   argparser_add_argument(parser, NULL, ARG_POS_SRC);                 // valid
   argparser_add_argument(parser, NULL, ARG_POS_DEST);                // valid
   argparser_add_argument(parser, NULL, "anothersupercoolargument");  // valid

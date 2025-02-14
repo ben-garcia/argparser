@@ -20,7 +20,6 @@ typedef enum argparser_arg_type {
   AP_ARG_FLOAT,   // Parser convert to float.
   AP_ARG_INT,     // Parser convert to integer.
   AP_ARG_STRING,  // Same as not setting the type arg.
-  AP_ARG_BOOL,    // Parser convert to 0 false 1 true.
 } argparser_arg_type;
 
 typedef struct argparser argparser;

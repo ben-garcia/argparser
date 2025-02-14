@@ -1,6 +1,7 @@
 #include "argparser.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,11 +54,6 @@ typedef enum arg_kind {
   ARG_KIND_OPT_NAME,
 } arg_kind;
 
-// typedef enum argparser_arg_type {
-//   ARGPARSER_ARG_TYPE_POSITIONAL,  // always required.
-//   ARGPARSER_ARG_TYPE_OPTIONAL,    // optional by default. Can be changed
-// } argparser_arg_type;
-
 typedef struct argparser_argument {
   argparser_arg_action action;  // how command line args should be handled.
   char *choices;        // Comma seperated string of acceptable arg values.
@@ -84,7 +80,6 @@ typedef struct argparser_argument {
   char required;            // Used to make option args required.
   argparser_arg_type type;  // Type to convert to from string.
   // char *version;  // version of the program.
-  // argparser_arg_type arg_type;  // positional or optional
 } argparser_argument;
 
 struct argparser {
@@ -146,14 +141,16 @@ defer:
   return result;
 }
 
-static void arg_destroy(void **arg) {
-  if (*arg != NULL) {
-    if (((argparser_argument *)(*arg))->value != NULL) {
-      FREE(((argparser_argument *)(*arg))->value);
+static void arg_destroy(void **argument) {
+  argparser_argument *arg = *argument;
+
+  if (arg != NULL) {
+    if (arg->value != NULL) {
+      FREE(arg->value);
     }
 
-    FREE(*arg);
-    *arg = NULL;
+    FREE(arg);
+    arg = NULL;
   }
 }
 
@@ -376,11 +373,15 @@ defer:
  *                 0 for no argument type,
  *                 1 for argument flag,
  *                 2 for argument name.
+ *                 3 for numerical result is out of range.,
+ *                 4 for invalid int value.
+ *                 5 for invalid float value.
  *
  * @return 0 on success, 2 indicates memory allocation failed.
  */
 static int add_error_to_parser(argparser *parser, argparser_argument *arg,
-                               char *flag_or_name, unsigned int opt_type) {
+                               char *flag_or_name, unsigned int opt_type,
+                               const char *arg_value) {
   int result = STATUS_SUCCESS;
   string_builder *sb = NULL;
   char *message = NULL;
@@ -389,10 +390,11 @@ static int add_error_to_parser(argparser *parser, argparser_argument *arg,
     RETURN_DEFER(result);
   }
 
-  if (arg != NULL && flag_or_name == NULL) {
+  if (arg != NULL && flag_or_name == NULL && opt_type == 0) {
     // Use argument to format error message.
+    string_builder_append(sb, "argument ", 9);
     if (arg->short_name != NULL) {
-      string_builder_append_fmtstr(sb, "argument %s", arg->short_name);
+      string_builder_append_fmtstr(sb, "%s", arg->short_name);
     }
 
     if (arg->short_name != NULL && arg->long_name != NULL) {
@@ -403,16 +405,68 @@ static int add_error_to_parser(argparser *parser, argparser_argument *arg,
       string_builder_append(sb, arg->long_name, strlen(arg->long_name));
     }
 
+    string_builder_append_char(sb, ':');
     string_builder_append(sb, " expected one argument", 21);
 
   } else if (arg == NULL && flag_or_name != NULL && opt_type == 1) {
     // Use argument flag to format error message.
-    string_builder_append_fmtstr(sb, "argument -%c expected one argument",
+    string_builder_append_fmtstr(sb, "argument -%c: expected one argument",
                                  flag_or_name[0]);
   } else if (arg == NULL && flag_or_name != NULL && opt_type == 2) {
     // Use argument name to format error message.
-    string_builder_append_fmtstr(sb, "argument %s expected one argument\n",
+    string_builder_append_fmtstr(sb, "argument %s: expected one argument\n",
                                  flag_or_name);
+  } else if (arg != NULL && flag_or_name == NULL && opt_type == 3) {
+    // Use argument to format error message.
+    string_builder_append(sb, "argument ", 9);
+    if (arg->short_name != NULL) {
+      string_builder_append_fmtstr(sb, "%s", arg->short_name);
+    }
+
+    if (arg->short_name != NULL && arg->long_name != NULL) {
+      string_builder_append_char(sb, '/');
+    }
+
+    if (arg->long_name != NULL) {
+      string_builder_append(sb, arg->long_name, strlen(arg->long_name));
+    }
+
+    string_builder_append_char(sb, ':');
+    string_builder_append(sb, " numerical result is out of range", 33);
+  } else if (arg != NULL && flag_or_name == NULL && opt_type == 4) {
+    // Use argument to format error message.
+    string_builder_append(sb, "argument ", 9);
+    if (arg->short_name != NULL) {
+      string_builder_append_fmtstr(sb, "%s", arg->short_name);
+    }
+
+    if (arg->short_name != NULL && arg->long_name != NULL) {
+      string_builder_append_char(sb, '/');
+    }
+
+    if (arg->long_name != NULL) {
+      string_builder_append(sb, arg->long_name, strlen(arg->long_name));
+    }
+
+    string_builder_append_char(sb, ':');
+    string_builder_append_fmtstr(sb, " invalid int value: '%s'", arg_value);
+  } else if (arg != NULL && flag_or_name == NULL && opt_type == 5) {
+    // Use argument to format error message.
+    string_builder_append(sb, "argument ", 9);
+    if (arg->short_name != NULL) {
+      string_builder_append_fmtstr(sb, "%s", arg->short_name);
+    }
+
+    if (arg->short_name != NULL && arg->long_name != NULL) {
+      string_builder_append_char(sb, '/');
+    }
+
+    if (arg->long_name != NULL) {
+      string_builder_append(sb, arg->long_name, strlen(arg->long_name));
+    }
+
+    string_builder_append_char(sb, ':');
+    string_builder_append_fmtstr(sb, " invalid float value: '%s'", arg_value);
   }
 
   string_builder_build(sb, &message);
@@ -437,6 +491,88 @@ defer:
 }
 
 /**
+ * Validate the argument type based on it's 'type' property.
+ *
+ * @param parser argparser
+ * @param arg The argument to check.
+ * @param value The value to validate.
+ *
+ * @return 0 on success,
+ *         1 indicates a numerical result is out of range,
+ *         2 indicates arg value is invalid.
+ */
+static int validate_argument_type(argparser *parser, argparser_argument *arg,
+                                  char *arg_value) {
+  int result = STATUS_SUCCESS;
+
+  if (arg->value != NULL) {
+    // Deallocate previous value
+    FREE(arg->value);
+  }
+
+  switch (arg->type) {
+    case AP_ARG_FLOAT: {
+      char *endptr = NULL;
+      char *str = arg_value;
+      errno = 0;
+      double val = strtod(str, &endptr);
+
+      if (errno == ERANGE) {
+        add_error_to_parser(parser, arg, NULL, 3, NULL);
+        RETURN_DEFER(1);
+      }
+
+      if (endptr == str || strlen(endptr) > 0) {
+        add_error_to_parser(parser, arg, NULL, 5, arg_value);
+        RETURN_DEFER(2);
+      }
+
+      FREE(arg_value);
+      arg_value = NULL;
+
+      arg->value = (double *)malloc(sizeof(double));
+      *(double *)arg->value = val;
+
+      break;
+    }
+    case AP_ARG_INT: {
+      char *endptr = NULL;
+      char *str = arg_value;
+      errno = 0;
+      long val = strtol(str, &endptr, 10);
+
+      if (errno == ERANGE) {
+        add_error_to_parser(parser, arg, NULL, 3, NULL);
+        RETURN_DEFER(1);
+      }
+
+      if (endptr == str || strlen(endptr) > 0) {
+        add_error_to_parser(parser, arg, NULL, 4, arg_value);
+        RETURN_DEFER(2);
+      }
+
+      FREE(arg_value);
+      arg_value = NULL;
+
+      arg->value = (long *)malloc(sizeof(long));
+      *(long *)arg->value = val;
+
+      break;
+    }
+    case AP_ARG_STRING:
+      arg->value = arg_value;
+      break;
+  }
+
+defer:
+  if (arg_value != NULL && arg->type != AP_ARG_STRING) {
+    FREE(arg_value);
+  }
+
+  return result;
+}
+
+/**
  * Validate the argument.
  *
  * @param parg argparser_argument to validate.
@@ -452,6 +588,7 @@ static int validate_argument(argparser *parser, argparser_argument *arg,
       break;
     case AP_ARG_STORE: {
       string_slice *value_slice = NULL;
+      char *arg_value = NULL;
       int ss_length = 0;
 
       if (args_str[index] == ' ') {
@@ -463,7 +600,7 @@ static int validate_argument(argparser *parser, argparser_argument *arg,
 
       while (args_str[index] != ' ') {
         if (*(args_str + index) == '\0' && ss_length == 0) {
-          add_error_to_parser(parser, arg, NULL, 0);
+          add_error_to_parser(parser, arg, NULL, 0, NULL);
           break;
         }
 
@@ -477,11 +614,13 @@ static int validate_argument(argparser *parser, argparser_argument *arg,
         ss_length++;
       }
 
-      if (arg->value != NULL) {
-        // Deallocate previous value
-        FREE(arg->value);
+      string_slice_to_string(value_slice, &arg_value);
+
+      if (validate_argument_type(parser, arg, arg_value) == 0) {
+      } else {
+        // Error detected.
       }
-      string_slice_to_string(value_slice, (char **)&arg->value);
+
       string_slice_destroy(&value_slice);
       break;
     }
@@ -673,7 +812,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
       if (index + 1 < args_str_length &&
           is_valid_arg_flag(parser, flags, args_str[index]) == 0 &&
           is_valid_arg_flag(parser, flags, args_str[index + 1]) == 0) {
-        add_error_to_parser(parser, NULL, args_str + index++, 1);
+        add_error_to_parser(parser, NULL, args_str + index++, 1, NULL);
         RETURN_DEFER(index);
       }
 
@@ -706,7 +845,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
     }
     case ARG_KIND_OPT_NAME: {
       if (get_arg_name(args_str, index, &name) == STATUS_OUT_OF_BOUNDS) {
-        add_error_to_parser(parser, NULL, name, 2);
+        add_error_to_parser(parser, NULL, name, 2, NULL);
         RETURN_DEFER(strlen(args_str));
       }
 
@@ -800,10 +939,11 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
       FREE(str);
     } else {
       for (unsigned int i = current_pos_count; i < parser->pos_args_size; i++) {
-        char *arg = NULL;
+        char *arg_name = NULL;
 
-        dynamic_array_find_ref(pos_args, i - 1, (void **)&arg);
-        string_builder_append(sb, arg, strlen(arg));
+        dynamic_array_find_ref_str(pos_args, i, (void **)&arg_name);
+        string_builder_append(sb, arg_name, strlen(arg_name));
+        string_builder_append_char(sb, ' ');
       }
     }
 
@@ -1096,9 +1236,6 @@ int argparser_add_type_to_arg(argparser *parser, char *name_or_flag,
     case AP_ARG_STRING:
       type_value = AP_ARG_STRING;
       break;
-    case AP_ARG_BOOL:
-      type_value = AP_ARG_BOOL;
-      break;
     default:
       RETURN_DEFER(STATUS_FAILURE);
   }
@@ -1309,7 +1446,7 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
           i + name_length + 1 < args_length &&
           args_str[i + name_length + 1] == '-') {
         // Argument name value cannot conflict with another argument flag.
-        add_error_to_parser(parser, NULL, name, 2);
+        add_error_to_parser(parser, NULL, name, 2, NULL);
         i += name_length;
         FREE(name);
         continue;
@@ -1325,14 +1462,14 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
         if (i + 2 < args_length && strncmp(args_str + i + 2, "--", 2) == 0) {
           // Argument flag value cannot conflict with another argument's name.
           // example, '-a--name'
-          add_error_to_parser(parser, NULL, args_str + i + 1, 1);
+          add_error_to_parser(parser, NULL, args_str + i + 1, 1, NULL);
           i++;
           break;
         } else if (i + 3 < args_length &&
                    strncmp(args_str + i + 3, "--", 2) == 0) {
           // Same as above but seperated by a space.
           // example, '-a --name'
-          add_error_to_parser(parser, NULL, args_str + i + 1, 1);
+          add_error_to_parser(parser, NULL, args_str + i + 1, 1, NULL);
           i++;
           break;
         } else if (i + 2 < args_length &&
@@ -1341,7 +1478,7 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
                    is_valid_arg_flag(parser, flags, args_str[i + 1]) == 0) {
           // Argument flag value cannot conflict with another argument's flag.
           // example, '-a-b'
-          add_error_to_parser(parser, NULL, args_str + i + 1, 1);
+          add_error_to_parser(parser, NULL, args_str + i + 1, 1, NULL);
           i++;
           break;
         } else if (i + 3 < args_length &&
@@ -1350,7 +1487,7 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
                    is_valid_arg_flag(parser, flags, args_str[i + 1]) == 0) {
           // Argument flag value cannot conflict with another argument's flag.
           // example, '-a -b'
-          add_error_to_parser(parser, NULL, args_str + i + 1, 1);
+          add_error_to_parser(parser, NULL, args_str + i + 1, 1, NULL);
           i++;
           break;
         }
