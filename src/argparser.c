@@ -367,21 +367,15 @@ defer:
  * Append error message to parser errors array.
  *
  * @param parser argparser
- * @param arg argparser_argument
- * @param flag_or_name
- * @param opt_type number indicating the argument type,
- *                 0 for no argument type,
- *                 1 for argument flag,
- *                 2 for argument name.
- *                 3 for numerical result is out of range.,
- *                 4 for invalid int value.
- *                 5 for invalid float value.
- *
+ * @param short_name argument short name.
+ * @param long_name argument long name.
+ * @param error_message message to append at the end of the constructed message.
+
  * @return 0 on success, 2 indicates memory allocation failed.
  */
-static int add_error_to_parser(argparser *parser, argparser_argument *arg,
-                               char *flag_or_name, unsigned int opt_type,
-                               const char *arg_value) {
+static int add_error_to_parser(argparser *parser, const char *short_name,
+                               const char *long_name,
+                               const char *error_message) {
   int result = STATUS_SUCCESS;
   string_builder *sb = NULL;
   char *message = NULL;
@@ -390,84 +384,22 @@ static int add_error_to_parser(argparser *parser, argparser_argument *arg,
     RETURN_DEFER(result);
   }
 
-  if (arg != NULL && flag_or_name == NULL && opt_type == 0) {
-    // Use argument to format error message.
-    string_builder_append(sb, "argument ", 9);
-    if (arg->short_name != NULL) {
-      string_builder_append_fmtstr(sb, "%s", arg->short_name);
-    }
+  string_builder_append(sb, "argument ", 9);
 
-    if (arg->short_name != NULL && arg->long_name != NULL) {
-      string_builder_append_char(sb, '/');
-    }
-
-    if (arg->long_name != NULL) {
-      string_builder_append(sb, arg->long_name, strlen(arg->long_name));
-    }
-
-    string_builder_append_char(sb, ':');
-    string_builder_append(sb, " expected one argument", 21);
-
-  } else if (arg == NULL && flag_or_name != NULL && opt_type == 1) {
-    // Use argument flag to format error message.
-    string_builder_append_fmtstr(sb, "argument -%c: expected one argument",
-                                 flag_or_name[0]);
-  } else if (arg == NULL && flag_or_name != NULL && opt_type == 2) {
-    // Use argument name to format error message.
-    string_builder_append_fmtstr(sb, "argument %s: expected one argument\n",
-                                 flag_or_name);
-  } else if (arg != NULL && flag_or_name == NULL && opt_type == 3) {
-    // Use argument to format error message.
-    string_builder_append(sb, "argument ", 9);
-    if (arg->short_name != NULL) {
-      string_builder_append_fmtstr(sb, "%s", arg->short_name);
-    }
-
-    if (arg->short_name != NULL && arg->long_name != NULL) {
-      string_builder_append_char(sb, '/');
-    }
-
-    if (arg->long_name != NULL) {
-      string_builder_append(sb, arg->long_name, strlen(arg->long_name));
-    }
-
-    string_builder_append_char(sb, ':');
-    string_builder_append(sb, " numerical result is out of range", 33);
-  } else if (arg != NULL && flag_or_name == NULL && opt_type == 4) {
-    // Use argument to format error message.
-    string_builder_append(sb, "argument ", 9);
-    if (arg->short_name != NULL) {
-      string_builder_append_fmtstr(sb, "%s", arg->short_name);
-    }
-
-    if (arg->short_name != NULL && arg->long_name != NULL) {
-      string_builder_append_char(sb, '/');
-    }
-
-    if (arg->long_name != NULL) {
-      string_builder_append(sb, arg->long_name, strlen(arg->long_name));
-    }
-
-    string_builder_append_char(sb, ':');
-    string_builder_append_fmtstr(sb, " invalid int value: '%s'", arg_value);
-  } else if (arg != NULL && flag_or_name == NULL && opt_type == 5) {
-    // Use argument to format error message.
-    string_builder_append(sb, "argument ", 9);
-    if (arg->short_name != NULL) {
-      string_builder_append_fmtstr(sb, "%s", arg->short_name);
-    }
-
-    if (arg->short_name != NULL && arg->long_name != NULL) {
-      string_builder_append_char(sb, '/');
-    }
-
-    if (arg->long_name != NULL) {
-      string_builder_append(sb, arg->long_name, strlen(arg->long_name));
-    }
-
-    string_builder_append_char(sb, ':');
-    string_builder_append_fmtstr(sb, " invalid float value: '%s'", arg_value);
+  if (short_name != NULL) {
+    string_builder_append_fmtstr(sb, "%s", short_name);
   }
+
+  if (short_name != NULL && long_name != NULL) {
+    string_builder_append_char(sb, '/');
+  }
+
+  if (long_name != NULL) {
+    string_builder_append(sb, long_name, strlen(long_name));
+  }
+
+  string_builder_append(sb, ": ", 2);
+  string_builder_append(sb, error_message, strlen(error_message));
 
   string_builder_build(sb, &message);
 
@@ -518,12 +450,15 @@ static int validate_argument_type(argparser *parser, argparser_argument *arg,
       double val = strtod(str, &endptr);
 
       if (errno == ERANGE) {
-        add_error_to_parser(parser, arg, NULL, 3, NULL);
+        add_error_to_parser(parser, arg->short_name, arg->long_name,
+                            "numerical result is out of range");
         RETURN_DEFER(1);
       }
 
       if (endptr == str || strlen(endptr) > 0) {
-        add_error_to_parser(parser, arg, NULL, 5, arg_value);
+        char message[50];
+        snprintf(message, 50, "invalid float value: '%s'", arg_value);
+        add_error_to_parser(parser, arg->short_name, arg->long_name, message);
         RETURN_DEFER(2);
       }
 
@@ -542,12 +477,15 @@ static int validate_argument_type(argparser *parser, argparser_argument *arg,
       long val = strtol(str, &endptr, 10);
 
       if (errno == ERANGE) {
-        add_error_to_parser(parser, arg, NULL, 3, NULL);
+        add_error_to_parser(parser, arg->short_name, arg->long_name,
+                            "numerical result is out of range");
         RETURN_DEFER(1);
       }
 
       if (endptr == str || strlen(endptr) > 0) {
-        add_error_to_parser(parser, arg, NULL, 4, arg_value);
+        char message[50];
+        snprintf(message, 50, "invalid int value: '%s'", arg_value);
+        add_error_to_parser(parser, arg->short_name, arg->long_name, message);
         RETURN_DEFER(2);
       }
 
@@ -600,7 +538,8 @@ static int validate_argument(argparser *parser, argparser_argument *arg,
 
       while (args_str[index] != ' ') {
         if (*(args_str + index) == '\0' && ss_length == 0) {
-          add_error_to_parser(parser, arg, NULL, 0, NULL);
+          add_error_to_parser(parser, arg->short_name, arg->long_name,
+                              "expected one argument");
           break;
         }
 
@@ -812,7 +751,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
       if (index + 1 < args_str_length &&
           is_valid_arg_flag(parser, flags, args_str[index]) == 0 &&
           is_valid_arg_flag(parser, flags, args_str[index + 1]) == 0) {
-        add_error_to_parser(parser, NULL, args_str + index++, 1, NULL);
+        add_error_to_parser(parser, NULL, concat_str, "expected one argument");
         RETURN_DEFER(index);
       }
 
@@ -845,7 +784,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
     }
     case ARG_KIND_OPT_NAME: {
       if (get_arg_name(args_str, index, &name) == STATUS_OUT_OF_BOUNDS) {
-        add_error_to_parser(parser, NULL, name, 2, NULL);
+        add_error_to_parser(parser, name, NULL, "expected one argument");
         RETURN_DEFER(strlen(args_str));
       }
 
@@ -1446,7 +1385,7 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
           i + name_length + 1 < args_length &&
           args_str[i + name_length + 1] == '-') {
         // Argument name value cannot conflict with another argument flag.
-        add_error_to_parser(parser, NULL, name, 2, NULL);
+        add_error_to_parser(parser, name, NULL, "expected one argument");
         i += name_length;
         FREE(name);
         continue;
@@ -1457,19 +1396,24 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
       i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_NAME, i, flags,
                                   args_length);
     } else if (args_str[i] == '-') {
+      char concat_str[3];
+      sprintf(concat_str, "-%c", args_str[i + 1]);
+
       // Optional flag argument.
       while (args_str[i] != ' ' && i < args_length) {
         if (i + 2 < args_length && strncmp(args_str + i + 2, "--", 2) == 0) {
           // Argument flag value cannot conflict with another argument's name.
           // example, '-a--name'
-          add_error_to_parser(parser, NULL, args_str + i + 1, 1, NULL);
+          add_error_to_parser(parser, NULL, concat_str,
+                              "expected one argument");
           i++;
           break;
         } else if (i + 3 < args_length &&
                    strncmp(args_str + i + 3, "--", 2) == 0) {
           // Same as above but seperated by a space.
           // example, '-a --name'
-          add_error_to_parser(parser, NULL, args_str + i + 1, 1, NULL);
+          add_error_to_parser(parser, NULL, concat_str,
+                              "expected one argument");
           i++;
           break;
         } else if (i + 2 < args_length &&
@@ -1478,7 +1422,8 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
                    is_valid_arg_flag(parser, flags, args_str[i + 1]) == 0) {
           // Argument flag value cannot conflict with another argument's flag.
           // example, '-a-b'
-          add_error_to_parser(parser, NULL, args_str + i + 1, 1, NULL);
+          add_error_to_parser(parser, NULL, concat_str,
+                              "expected one argument");
           i++;
           break;
         } else if (i + 3 < args_length &&
@@ -1487,7 +1432,8 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
                    is_valid_arg_flag(parser, flags, args_str[i + 1]) == 0) {
           // Argument flag value cannot conflict with another argument's flag.
           // example, '-a -b'
-          add_error_to_parser(parser, NULL, args_str + i + 1, 1, NULL);
+          add_error_to_parser(parser, NULL, concat_str,
+                              "expected one argument");
           i++;
           break;
         }
