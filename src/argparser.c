@@ -1204,6 +1204,10 @@ int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
                                   bool required) {
   int result = STATUS_SUCCESS;
   argparser_argument *arg = NULL;
+  int bytes = 0;
+  char *flag;
+  char *name;
+  char concat_str[100];
 
   if (required != 0 && required != 1) {
     RETURN_DEFER(6);
@@ -1211,32 +1215,32 @@ int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
 
   GET_ARG_FROM_PARSER(parser->arguments, name_or_flag, arg);
 
-  int bytes = 0;
-  char *flag;
-  char *name;
-
   if (arg->short_name == NULL) {
     flag = "-0";
   } else {
     flag = arg->short_name;
   }
+
   bytes += 2;
 
   if (arg->long_name == NULL) {
-    name = "--0\0";
+    name = "--0";
     bytes += 3;
   } else {
     name = arg->long_name;
     bytes += strlen(arg->long_name);
   }
 
-  char *concat_str = MALLOC(bytes);
+  bytes += 2;  // include comma and null byte.
 
-  // TODO: make sure this isn't going to add null character.
   snprintf(concat_str, bytes, "%s,%s", flag, name);
 
   if ((result = string_builder_append(parser->req_opt_args, concat_str,
                                       strlen(concat_str))) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  if ((result = string_builder_append_char(parser->req_opt_args, ' ') != 0)) {
     RETURN_DEFER(result);
   }
 
@@ -1246,9 +1250,6 @@ int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
   arg->required = required;
 
 defer:
-  if (concat_str != NULL) {
-    FREE(concat_str);
-  }
   return result;
 }
 
