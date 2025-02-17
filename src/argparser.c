@@ -862,17 +862,138 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
     FREE(args);
   }
 
-  if (current_pos_count < parser->pos_args_size) {
-    // Missing positional argument.
-    string_builder *sb = NULL;
-    char *message = NULL;
+  string_builder *sb = NULL;
+  char *message = NULL;
 
+  if (parser->req_opt_args != NULL) {
+    // Missing requird optional argument.
     string_builder_create(&sb);
 
     string_builder_append(sb, "the following argument(s) are required: ", 40);
 
+    string_slice *ss = NULL;
+    string_slice *output = NULL;
+    char *opt_args = NULL;
+
+    string_builder_build(parser->req_opt_args, &opt_args);
+
+    if (((result = string_slice_create(&ss, opt_args, strlen(opt_args))) !=
+         0) ||
+        (result = string_slice_create(&output, NULL, 0)) != 0) {
+      RETURN_DEFER(result);
+    }
+
+    string_builder *arg_name = NULL;
+    argparser_argument *arg = NULL;
+    string_slice *flag_slice = NULL;
+    string_slice *name_slice = NULL;
+    char *flag = NULL;
+    char *name = NULL;
+    char *opt_str = NULL;
+
+    string_slice_trim(ss);
+
+    while (string_slice_split(ss, output, ' ') == 0) {
+      string_slice_to_string(output, &opt_str);
+      string_slice_create(&name_slice, opt_str, strlen(opt_str));
+      string_slice_create(&flag_slice, NULL, 0);
+      string_slice_split(name_slice, flag_slice, ',');
+      string_slice_to_string(flag_slice, &flag);
+      string_slice_to_string(name_slice, &name);
+
+      if (strncmp(flag, "-0", 2) != 0 && strncmp(name, "--0", 3) == 0) {
+        // flag found.
+        hash_table_search(parser->arguments, flag, (void *)&arg);
+
+        if (arg->value == NULL) {
+          char *concat_str = NULL;
+
+          string_builder_create(&arg_name);
+
+          if (arg->short_name != NULL) {
+            string_builder_append_fmtstr(arg_name, "%s", arg->short_name);
+          }
+
+          if (arg->short_name != NULL && arg->long_name != NULL) {
+            string_builder_append_char(arg_name, '/');
+          }
+
+          if (arg->long_name != NULL) {
+            string_builder_append_fmtstr(arg_name, "%s", arg->long_name);
+          }
+
+          string_builder_append_char(arg_name, ' ');
+
+          string_builder_build(arg_name, &concat_str);
+
+          string_builder_append(sb, concat_str, strlen(concat_str));
+          FREE(concat_str);
+        }
+        //} else if (strncmp(name, "--0", 3) != 0 && strncmp(flag, "-0", 2) ==
+        // 0) {
+        // name found.
+      } else {
+        // flag and name are defined.
+        hash_table_search(parser->arguments, name, (void *)&arg);
+
+        if (arg->value == NULL) {
+          char *concat_str = NULL;
+
+          string_builder_create(&arg_name);
+
+          if (arg->short_name != NULL) {
+            string_builder_append_fmtstr(arg_name, "%s", arg->short_name);
+          }
+
+          if (arg->short_name != NULL && arg->long_name != NULL) {
+            string_builder_append_char(arg_name, '/');
+          }
+
+          if (arg->long_name != NULL) {
+            string_builder_append_fmtstr(arg_name, "%s", arg->long_name);
+          }
+
+          string_builder_append_char(arg_name, ' ');
+
+          string_builder_build(arg_name, &concat_str);
+
+          string_builder_append(sb, concat_str, strlen(concat_str));
+          FREE(concat_str);
+        }
+      }
+
+      string_builder_destroy(&arg_name);
+      string_slice_destroy(&flag_slice);
+      string_slice_destroy(&name_slice);
+      FREE(flag);
+      flag = NULL;
+      FREE(name);
+      name = NULL;
+      FREE(opt_str);
+      opt_str = NULL;
+    }
+
+    if (current_pos_count == parser->pos_args_size) {
+      string_builder_build(sb, &message);
+      LOG_ERROR("%s", message);
+    }
+
+    string_slice_destroy(&ss);
+    string_slice_destroy(&output);
+    FREE(opt_args);
+  }
+
+  if (current_pos_count < parser->pos_args_size) {
+    // Missing positional argument.
+
+    if (parser->req_opt_args == NULL) {
+      string_builder_create(&sb);
+      string_builder_append(sb, "the following argument(s) are required: ", 40);
+    }
+
     if (current_pos_count == 0) {
       char *str = NULL;
+
       string_builder_build(parser->positional_args, &str);
       string_builder_append(sb, str, strlen(str));
       FREE(str);
@@ -889,14 +1010,19 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
     string_builder_build(sb, &message);
 
     LOG_ERROR("%s", message);
-
-    string_builder_destroy(&sb);
-    FREE(message);
   }
 
 defer:
   if (it != NULL) {
     dynamic_array_iter_destroy(&it);
+  }
+
+  if (sb != NULL) {
+    string_builder_destroy(&sb);
+  }
+
+  if (message != NULL) {
+    FREE(message);
   }
 
   return result;
@@ -923,10 +1049,6 @@ int argparser_create(argparser **parser) {
     RETURN_DEFER(result);
   }
 
-  if ((result = string_builder_create(&(*parser)->req_opt_args)) != 0) {
-    RETURN_DEFER(result);
-  }
-
   (*parser)->name = NULL;
   (*parser)->usage = NULL;
   (*parser)->description = NULL;
@@ -938,6 +1060,7 @@ int argparser_create(argparser **parser) {
   (*parser)->req_opt_args_size = 0;
   (*parser)->unrecognized_args = NULL;
   (*parser)->errors = NULL;
+  (*parser)->req_opt_args = NULL;
 
 defer:
   return result;
@@ -1235,6 +1358,10 @@ int argparser_add_required_to_arg(argparser *parser, char *name_or_flag,
 
   snprintf(concat_str, bytes, "%s,%s", flag, name);
 
+  if (parser->req_opt_args == NULL) {
+    string_builder_create(&parser->req_opt_args);
+  }
+
   if ((result = string_builder_append(parser->req_opt_args, concat_str,
                                       strlen(concat_str))) != 0) {
     RETURN_DEFER(result);
@@ -1455,7 +1582,8 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
   }
 
   if (parser->errors != NULL || parser->unrecognized_args != NULL ||
-      current_pos_count < parser->pos_args_size) {
+      current_pos_count < parser->pos_args_size ||
+      parser->req_opt_args != NULL) {
     print_errors(parser, pos_args, current_pos_count);
   }
 
