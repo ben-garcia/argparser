@@ -1,6 +1,9 @@
 #include "string_slice.h"
 
-#include "utils.h"
+#include <stdlib.h>
+#include <string.h>
+
+#include "logger.h"
 
 struct string_slice {
   char *string;
@@ -10,7 +13,7 @@ struct string_slice {
 int string_slice_create(string_slice **ss, char *str, unsigned int length) {
   int result = STATUS_SUCCESS;
 
-  if ((*ss = MALLOC(sizeof(string_slice))) == NULL) {
+  if ((*ss = malloc(sizeof(string_slice))) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
   (*ss)->string = str;
@@ -117,11 +120,11 @@ int string_slice_to_string(string_slice *ss, char **str) {
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
 
-  if (((*str) = MALLOC(ss->length + 1)) == NULL) {
+  if (((*str) = malloc(ss->length + 1)) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
-  MEMCPY(*str, ss->string, ss->length);
+  memcpy(*str, ss->string, ss->length);
   (*str)[ss->length] = '\0';
 
 defer:
@@ -130,7 +133,7 @@ defer:
 
 void string_slice_destroy(string_slice **ss) {
   if (*ss != NULL) {
-    FREE(*ss);
+    free(*ss);
     *ss = NULL;
   }
 }

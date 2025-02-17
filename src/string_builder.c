@@ -1,8 +1,11 @@
 #include "string_builder.h"
 
 #include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include "utils.h"
+#include "logger.h"
 
 struct string_builder {
   dynamic_array *string;  // string being built
@@ -11,8 +14,7 @@ struct string_builder {
 int string_builder_create(string_builder **sb) {
   int result = STATUS_SUCCESS;
 
-  if (((*sb) = MALLOC(sizeof(string_builder))) == NULL) {
-    LOG_ERROR("failed to allocated memory for string builder");
+  if (((*sb) = malloc(sizeof(string_builder))) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -49,7 +51,7 @@ int string_builder_append_fmtstr(string_builder *sb, const char *format, ...) {
 
   size = num_chars + 1;  // extra byte for '\0'
 
-  if ((buffer = MALLOC(size)) == NULL) {
+  if ((buffer = malloc(size)) == NULL) {
     LOG_ERROR("failed to allocate memory for buffer");
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
@@ -78,14 +80,14 @@ int string_builder_build(string_builder *sb, char **buffer) {
 
   int bytes = sizeof(char) * dynamic_array_get_size(sb->string);
 
-  if (((*buffer) = MALLOC(bytes + 1)) == NULL) {
+  if (((*buffer) = malloc(bytes + 1)) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
   void *item = NULL;
   dynamic_array_find_ref(sb->string, 0, &item);
 
-  MEMCPY(*buffer, item, bytes);
+  memcpy(*buffer, item, bytes);
   (*buffer)[bytes] = '\0';
 
 defer:

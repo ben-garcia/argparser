@@ -10,7 +10,7 @@
 #include "hash_table.h"
 #include "string_builder.h"
 #include "string_slice.h"
-#include "utils.h"
+#include "logger.h"
 
 /**
  * Add property to argparser.
@@ -117,7 +117,7 @@ static int arg_create(argparser_argument **arg, char short_name[2],
                       char *long_name) {
   int result = STATUS_SUCCESS;
 
-  if ((*arg = MALLOC(sizeof(argparser_argument))) == NULL) {
+  if ((*arg = malloc(sizeof(argparser_argument))) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -146,10 +146,10 @@ static void arg_destroy(void **argument) {
 
   if (arg != NULL) {
     if (arg->value != NULL) {
-      FREE(arg->value);
+      free(arg->value);
     }
 
-    FREE(arg);
+    free(arg);
     arg = NULL;
   }
 }
@@ -293,17 +293,17 @@ static int separate_opt_args(argparser *parser, hash_table **flags) {
 
     string_slice_destroy(&flag_slice);
     string_slice_destroy(&name_slice);
-    FREE(flag);
+    free(flag);
     flag = NULL;
-    FREE(name);
+    free(name);
     name = NULL;
-    FREE(opt_str);
+    free(opt_str);
     opt_str = NULL;
   }
 
   string_slice_destroy(&ss);
   string_slice_destroy(&output);
-  FREE(opt_args);
+  free(opt_args);
 
 defer:
   return result;
@@ -313,7 +313,7 @@ defer:
  * Deallocate memory for string.
  */
 static void destroy_str(void **str) {
-  FREE(str);
+  free(str);
   str = NULL;
 }
 
@@ -357,7 +357,7 @@ static int separate_pos_args(argparser *parser, dynamic_array **pos_args) {
 
   string_slice_destroy(&ss);
   string_slice_destroy(&output);
-  FREE(pos_args_str);
+  free(pos_args_str);
 
 defer:
   return result;
@@ -439,7 +439,7 @@ static int validate_argument_type(argparser *parser, argparser_argument *arg,
 
   if (arg->value != NULL) {
     // Deallocate previous value
-    FREE(arg->value);
+    free(arg->value);
   }
 
   switch (arg->type) {
@@ -462,7 +462,7 @@ static int validate_argument_type(argparser *parser, argparser_argument *arg,
         RETURN_DEFER(2);
       }
 
-      FREE(arg_value);
+      free(arg_value);
       arg_value = NULL;
 
       arg->value = (double *)malloc(sizeof(double));
@@ -489,7 +489,7 @@ static int validate_argument_type(argparser *parser, argparser_argument *arg,
         RETURN_DEFER(2);
       }
 
-      FREE(arg_value);
+      free(arg_value);
       arg_value = NULL;
 
       arg->value = (long *)malloc(sizeof(long));
@@ -504,7 +504,7 @@ static int validate_argument_type(argparser *parser, argparser_argument *arg,
 
 defer:
   if (arg_value != NULL && arg->type != AP_ARG_STRING) {
-    FREE(arg_value);
+    free(arg_value);
   }
 
   return result;
@@ -664,7 +664,7 @@ static int parse_positional_argument(argparser *parser, char *args_str,
   if (arg == NULL && name != NULL) {
     string_builder_append(parser->unrecognized_args, name, strlen(name));
     string_builder_append_char(parser->unrecognized_args, ' ');
-    FREE(name);
+    free(name);
     RETURN_DEFER(index);
   }
 
@@ -818,7 +818,7 @@ static int parse_optional_argument(argparser *parser, char *args_str,
 
 defer:
   if (name != NULL) {
-    FREE(name);
+    free(name);
   }
 
   return result;
@@ -859,7 +859,7 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
     }
 
     LOG_ERROR("unrecognized argument(s): %s", args);
-    FREE(args);
+    free(args);
   }
 
   string_builder *sb = NULL;
@@ -927,7 +927,7 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
           string_builder_build(arg_name, &concat_str);
 
           string_builder_append(sb, concat_str, strlen(concat_str));
-          FREE(concat_str);
+          free(concat_str);
         }
         //} else if (strncmp(name, "--0", 3) != 0 && strncmp(flag, "-0", 2) ==
         // 0) {
@@ -958,18 +958,18 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
           string_builder_build(arg_name, &concat_str);
 
           string_builder_append(sb, concat_str, strlen(concat_str));
-          FREE(concat_str);
+          free(concat_str);
         }
       }
 
       string_builder_destroy(&arg_name);
       string_slice_destroy(&flag_slice);
       string_slice_destroy(&name_slice);
-      FREE(flag);
+      free(flag);
       flag = NULL;
-      FREE(name);
+      free(name);
       name = NULL;
-      FREE(opt_str);
+      free(opt_str);
       opt_str = NULL;
     }
 
@@ -980,7 +980,7 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
 
     string_slice_destroy(&ss);
     string_slice_destroy(&output);
-    FREE(opt_args);
+    free(opt_args);
   }
 
   if (current_pos_count < parser->pos_args_size) {
@@ -996,7 +996,7 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
 
       string_builder_build(parser->positional_args, &str);
       string_builder_append(sb, str, strlen(str));
-      FREE(str);
+      free(str);
     } else {
       for (unsigned int i = current_pos_count; i < parser->pos_args_size; i++) {
         char *arg_name = NULL;
@@ -1022,7 +1022,7 @@ defer:
   }
 
   if (message != NULL) {
-    FREE(message);
+    free(message);
   }
 
   return result;
@@ -1031,7 +1031,7 @@ defer:
 int argparser_create(argparser **parser) {
   int result = STATUS_SUCCESS;
 
-  if ((*parser = MALLOC(sizeof(argparser))) == NULL) {
+  if ((*parser = malloc(sizeof(argparser))) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -1515,11 +1515,11 @@ int argparser_parse_args(argparser *parser, int argc, char *argv[]) {
         // Argument name value cannot conflict with another argument flag.
         add_error_to_parser(parser, name, NULL, "expected one argument");
         i += name_length;
-        FREE(name);
+        free(name);
         continue;
       }
 
-      FREE(name);
+      free(name);
 
       i = parse_optional_argument(parser, args_str, ARG_KIND_OPT_NAME, i, flags,
                                   args_length);
@@ -1597,7 +1597,7 @@ defer:
   }
 
   if (args_str != NULL) {
-    FREE(args_str);
+    free(args_str);
   }
 
   return result;
@@ -1618,7 +1618,7 @@ void argparser_destroy(argparser **parser) {
       dynamic_array_destroy(&(*parser)->errors);
     }
 
-    FREE(*parser);
+    free(*parser);
     *parser = NULL;
   }
 }

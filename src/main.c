@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 #include "argparser.h"
-#include "utils.h"
+#include "logger.h"
 
 #define ARG_SHORT_HELP "-h"
 #define ARG_LONG_HELP "--help"

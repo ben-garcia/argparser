@@ -1,6 +1,9 @@
 #include "dynamic_array.h"
 
-#include "utils.h"
+#include <stdlib.h>
+#include <string.h>
+
+#include "logger.h"
 
 struct dynamic_array {
   void **items;
@@ -32,14 +35,14 @@ static int dynamic_array_resize(dynamic_array **array) {
   size_t old_capacity = (*array)->capacity;
 
   if (((*array)->items =
-           REALLOC((*array)->items,
+           realloc((*array)->items,
                    (*array)->data_size * ((*array)->capacity <<= 1))) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
   // since realloc doesn't zero out new space allocated,
   // it is done manually.
-  MEMSET((void *)(*array)->items + (old_capacity * (*array)->data_size), 0,
+  memset((void *)(*array)->items + (old_capacity * (*array)->data_size), 0,
          (*array)->capacity - old_capacity);
 
 defer:
@@ -51,7 +54,7 @@ int dynamic_array_create(dynamic_array **array, unsigned int data_size,
                          int (*matchfn)(void *, void *)) {
   int result = STATUS_SUCCESS;
 
-  if ((*array = MALLOC(sizeof(dynamic_array))) == NULL) {
+  if ((*array = malloc(sizeof(dynamic_array))) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -81,14 +84,14 @@ int dynamic_array_add(dynamic_array *array, const void *item) {
 
   // array can't be empty.
   if (array->size == 0) {
-    array->items = CALLOC(array->capacity, array->data_size);
+    array->items = calloc(array->capacity, array->data_size);
   }
 
   if (array->size == array->capacity) {
     dynamic_array_resize(&array);
   }
 
-  MEMCPY((void *)array->items + array->data_size * array->size++, item,
+  memcpy((void *)array->items + array->data_size * array->size++, item,
          array->data_size);
 
 defer:
@@ -110,7 +113,7 @@ int dynamic_array_add_str(dynamic_array *array, const char *str) {
 
   // array can't be empty.
   if (array->size == 0) {
-    array->items = CALLOC(array->capacity, array->data_size);
+    array->items = calloc(array->capacity, array->data_size);
   }
 
   if (array->size == array->capacity) {
@@ -138,7 +141,7 @@ int dynamic_array_add_many(dynamic_array *array, void **items,
   }
 
   if (dynamic_array_is_empty(array)) {
-    array->items = CALLOC(array->capacity, array->data_size);
+    array->items = calloc(array->capacity, array->data_size);
   }
 
   // make sure array has the necessary memory.
@@ -146,7 +149,7 @@ int dynamic_array_add_many(dynamic_array *array, void **items,
     dynamic_array_resize(&array);
   }
 
-  MEMCPY((void *)array->items + array->size * array->data_size, items,
+  memcpy((void *)array->items + array->size * array->data_size, items,
          array->data_size * length);
 
   array->size += length;
@@ -173,12 +176,11 @@ int dynamic_array_find(dynamic_array *array, unsigned int index, void **item) {
     RETURN_DEFER(STATUS_OUT_OF_BOUNDS);
   }
 
-  MEMCPY(*item, array->items + index, array->data_size);
+  memcpy(*item, array->items + index, array->data_size);
 
 defer:
   return result;
 }
-
 
 int dynamic_array_find_ref(dynamic_array *array, unsigned int index,
                            void **item) {
@@ -206,7 +208,7 @@ defer:
 }
 
 int dynamic_array_find_ref_str(dynamic_array *array, unsigned int index,
-                           void **str) {
+                               void **str) {
   int result = STATUS_SUCCESS;
 
   // array must be defined.
@@ -258,7 +260,7 @@ int dynamic_array_remove(dynamic_array *array, unsigned int index) {
   }
 
   array->size--;
-  MEMMOVE(array->items + index, array->items + index + 1,
+  memmove(array->items + index, array->items + index + 1,
           array->data_size * array->size);
 
 defer:
@@ -278,7 +280,7 @@ int dynamic_array_shrink_to_fit(dynamic_array *array) {
     RETURN_DEFER(STATUS_SUCCESS);
   }
 
-  array->items = REALLOC(array->items, array->size * array->data_size);
+  array->items = realloc(array->items, array->size * array->data_size);
   array->capacity = array->size;
 
 defer:
@@ -293,9 +295,9 @@ void dynamic_array_destroy(dynamic_array **array) {
       }
     }
 
-    FREE((*array)->items);
+    free((*array)->items);
     (*array)->items = NULL;
-    FREE(*array);
+    free(*array);
     *array = NULL;
   }
 }
@@ -303,7 +305,7 @@ void dynamic_array_destroy(dynamic_array **array) {
 int dynamic_array_iter_create(dynamic_array_iter **it, dynamic_array *array) {
   int result = STATUS_SUCCESS;
 
-  if ((*it = MALLOC(sizeof(dynamic_array_iter))) == NULL) {
+  if ((*it = malloc(sizeof(dynamic_array_iter))) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -357,7 +359,7 @@ void dynamic_array_iter_reset(dynamic_array_iter *it) { it->index = 0; }
 
 void dynamic_array_iter_destroy(dynamic_array_iter **it) {
   if (*it != NULL) {
-    FREE(*it);
+    free(*it);
     *it = NULL;
   }
 }

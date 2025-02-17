@@ -1,9 +1,9 @@
 #include "hash_table.h"
 
-#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#include "utils.h"
+#include "logger.h"
 
 #define HASH_TABLE_LOAD_FACTOR 0.75
 #define HASH_TABLE_INITIAL_SIZE 8
@@ -91,7 +91,7 @@ static hash_table_entry *find_entry(hash_table_entry *entries,
  * @param capacity the new capacity.
  */
 static void resize(hash_table *ht, int capacity) {
-  hash_table_entry *new_entries = MALLOC(capacity * sizeof(hash_table_entry));
+  hash_table_entry *new_entries = malloc(capacity * sizeof(hash_table_entry));
 
   for (int i = 0; i < capacity; i++) {
     new_entries[i].key = NULL;
@@ -115,7 +115,7 @@ static void resize(hash_table *ht, int capacity) {
     ht->size++;
   }
 
-  FREE(ht->entries);
+  free(ht->entries);
 
   ht->entries = new_entries;
   ht->capacity = capacity;
@@ -126,7 +126,7 @@ int hash_table_create(hash_table **ht, unsigned int data_size,
                       void (*freefn)(void **)) {
   int result = STATUS_SUCCESS;
 
-  if ((*ht = MALLOC(sizeof(hash_table))) == NULL) {
+  if ((*ht = malloc(sizeof(hash_table))) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -156,7 +156,7 @@ int hash_table_insert(hash_table *ht, const char *key, const void *value) {
   }
 
   if (ht->size == 0) {
-    ht->entries = MALLOC(ht->capacity * sizeof(hash_table_entry));
+    ht->entries = malloc(ht->capacity * sizeof(hash_table_entry));
 
     // Setting keys and values to NULL indicates the position is empty. As
     // opposed to a tombstone.
@@ -185,13 +185,13 @@ int hash_table_insert(hash_table *ht, const char *key, const void *value) {
     ht->size++;
   }
 
-  entry->key = MALLOC(sizeof(char) * (key_length + 1));
+  entry->key = malloc(sizeof(char) * (key_length + 1));
   strcpy(entry->key, key);
   entry->key[key_length] = '\0';
 
   if (ht->freefn == NULL) {
-    entry->value = MALLOC(ht->data_size);
-    MEMCPY((void *)entry->value, value, ht->data_size);
+    entry->value = malloc(ht->data_size);
+    memcpy((void *)entry->value, value, ht->data_size);
   } else {
     // Indicates user is responsible for allocate/deallocate memory.
     entry->value = (void *)value;
@@ -210,7 +210,7 @@ int hash_table_insert_and_replace(hash_table *ht, const char *key,
   }
 
   if (ht->size == 0) {
-    ht->entries = MALLOC(ht->capacity * sizeof(hash_table_entry));
+    ht->entries = malloc(ht->capacity * sizeof(hash_table_entry));
 
     // Setting keys and values to NULL indicates the position is empty. As
     // opposed to a tombstone.
@@ -233,20 +233,20 @@ int hash_table_insert_and_replace(hash_table *ht, const char *key,
   if (is_new_key) {
     ht->size++;
 
-    entry->key = MALLOC(sizeof(char) * (key_length + 1));
+    entry->key = malloc(sizeof(char) * (key_length + 1));
     strcpy(entry->key, key);
     entry->key[key_length] = '\0';
 
     if (ht->freefn == NULL) {
-      entry->value = MALLOC(ht->data_size);
-      MEMCPY((void *)entry->value, value, ht->data_size);
+      entry->value = malloc(ht->data_size);
+      memcpy((void *)entry->value, value, ht->data_size);
     } else {
       // Indicates user is responsible for allocate/deallocate memory.
       entry->value = (void *)value;
     }
   } else {
     if (ht->freefn == NULL) {
-      MEMCPY((void *)entry->value, value, ht->data_size);
+      memcpy((void *)entry->value, value, ht->data_size);
     } else {
       ht->freefn(&entry->value);
       entry->value = (void *)value;
@@ -317,10 +317,10 @@ int hash_table_delete(hash_table *ht, const char *key) {
 
   ht->size--;
 
-  FREE(entry->key);
+  free(entry->key);
   entry->key = NULL;
 
-  FREE(entry->value);
+  free(entry->value);
   // entry value of 1 means the entry is a tombstone .
   entry->value = (void *)1;
 
@@ -341,26 +341,26 @@ void hash_table_destroy(hash_table **ht) {
   if (*ht != NULL) {
     // When the hash table is empty.
     if ((*ht)->size == 0) {
-      FREE(*ht);
+      free(*ht);
       *ht = NULL;
       return;
     }
 
     for (unsigned int i = 0; i < (*ht)->capacity; i++) {
       if ((*ht)->entries[i].key != NULL && (*ht)->entries[i].value != NULL) {
-        FREE((*ht)->entries[i].key);
+        free((*ht)->entries[i].key);
 
         if ((*ht)->freefn != NULL) {
           (*ht)->freefn(&(*ht)->entries[i].value);
         } else {
-          FREE((*ht)->entries[i].value);
+          free((*ht)->entries[i].value);
         }
       }
     }
 
-    FREE((*ht)->entries);
+    free((*ht)->entries);
     (*ht)->entries = NULL;
-    FREE(*ht);
+    free(*ht);
     *ht = NULL;
   }
 }
@@ -375,7 +375,7 @@ int hash_table_iter_create(hash_table_iter **it, hash_table *ht) {
   if (ht->size == 0) {
     RETURN_DEFER(STATUS_IS_EMPTY);
   }
-  if (((*it) = MALLOC(sizeof(hash_table_iter))) == NULL) {
+  if (((*it) = malloc(sizeof(hash_table_iter))) == NULL) {
     RETURN_DEFER(STATUS_MEMORY_FAILURE);
   }
 
@@ -426,6 +426,6 @@ defer:
 void hash_table_iter_reset(hash_table_iter *it) { it->index = 0; }
 
 void hash_table_iter_destroy(hash_table_iter **it) {
-  FREE(*it);
+  free(*it);
   *it = NULL;
 }
