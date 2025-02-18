@@ -8,9 +8,9 @@
 
 #include "dynamic_array.h"
 #include "hash_table.h"
+#include "logger.h"
 #include "string_builder.h"
 #include "string_slice.h"
-#include "logger.h"
 
 /**
  * Add property to argparser.
@@ -804,7 +804,6 @@ static int parse_optional_argument(argparser *parser, char *args_str,
       if (arg == NULL) {
         string_builder_append(parser->unrecognized_args, name, name_length);
         string_builder_append_char(parser->unrecognized_args, ' ');
-        // index += name_length - 2;  // exclude double dashes(--)
         index += name_length;
         RETURN_DEFER(index);
       }
@@ -821,6 +820,132 @@ defer:
     free(name);
   }
 
+  return result;
+}
+
+/**
+ *
+ */
+static int concat_required_optional_arguments(argparser *parser,
+                                              string_builder **sb,
+                                              unsigned int current_pos_count,
+                                              char **message) {
+  int result = STATUS_SUCCESS;
+
+  string_builder_create(sb);
+
+  string_builder_append(*sb, "the following argument(s) are required: ", 40);
+
+  string_slice *ss = NULL;
+  string_slice *output = NULL;
+  char *opt_args = NULL;
+
+  string_builder_build(parser->req_opt_args, &opt_args);
+
+  if (((result = string_slice_create(&ss, opt_args, strlen(opt_args))) != 0) ||
+      (result = string_slice_create(&output, NULL, 0)) != 0) {
+    RETURN_DEFER(result);
+  }
+
+  string_builder *arg_name = NULL;
+  argparser_argument *arg = NULL;
+  string_slice *flag_slice = NULL;
+  string_slice *name_slice = NULL;
+  char *flag = NULL;
+  char *name = NULL;
+  char *opt_str = NULL;
+
+  string_slice_trim(ss);
+
+  while (string_slice_split(ss, output, ' ') == 0) {
+    string_slice_to_string(output, &opt_str);
+    string_slice_create(&name_slice, opt_str, strlen(opt_str));
+    string_slice_create(&flag_slice, NULL, 0);
+    string_slice_split(name_slice, flag_slice, ',');
+    string_slice_to_string(flag_slice, &flag);
+    string_slice_to_string(name_slice, &name);
+
+    if (strncmp(flag, "-0", 2) != 0 && strncmp(name, "--0", 3) == 0) {
+      // flag found.
+      hash_table_search(parser->arguments, flag, (void *)&arg);
+
+      if (arg->value == NULL) {
+        char *concat_str = NULL;
+
+        string_builder_create(&arg_name);
+
+        if (arg->short_name != NULL) {
+          string_builder_append_fmtstr(arg_name, "%s", arg->short_name);
+        }
+
+        if (arg->short_name != NULL && arg->long_name != NULL) {
+          string_builder_append_char(arg_name, '/');
+        }
+
+        if (arg->long_name != NULL) {
+          string_builder_append_fmtstr(arg_name, "%s", arg->long_name);
+        }
+
+        string_builder_append_char(arg_name, ' ');
+
+        string_builder_build(arg_name, &concat_str);
+
+        string_builder_append(*sb, concat_str, strlen(concat_str));
+        free(concat_str);
+      }
+      //} else if (strncmp(name, "--0", 3) != 0 && strncmp(flag, "-0", 2) ==
+      // 0) {
+      // name found.
+    } else {
+      // flag and name are defined.
+      hash_table_search(parser->arguments, name, (void *)&arg);
+
+      if (arg->value == NULL) {
+        char *concat_str = NULL;
+
+        string_builder_create(&arg_name);
+
+        if (arg->short_name != NULL) {
+          string_builder_append_fmtstr(arg_name, "%s", arg->short_name);
+        }
+
+        if (arg->short_name != NULL && arg->long_name != NULL) {
+          string_builder_append_char(arg_name, '/');
+        }
+
+        if (arg->long_name != NULL) {
+          string_builder_append_fmtstr(arg_name, "%s", arg->long_name);
+        }
+
+        string_builder_append_char(arg_name, ' ');
+
+        string_builder_build(arg_name, &concat_str);
+
+        string_builder_append(*sb, concat_str, strlen(concat_str));
+        free(concat_str);
+      }
+    }
+
+    string_builder_destroy(&arg_name);
+    string_slice_destroy(&flag_slice);
+    string_slice_destroy(&name_slice);
+    free(flag);
+    flag = NULL;
+    free(name);
+    name = NULL;
+    free(opt_str);
+    opt_str = NULL;
+  }
+
+  if (current_pos_count == parser->pos_args_size) {
+    string_builder_build(*sb, message);
+    LOG_ERROR("%s", *message);
+  }
+
+  string_slice_destroy(&ss);
+  string_slice_destroy(&output);
+  free(opt_args);
+defer:
   return result;
 }
 
@@ -867,120 +992,8 @@ static int print_errors(argparser *parser, dynamic_array *pos_args,
 
   if (parser->req_opt_args != NULL) {
     // Missing requird optional argument.
-    string_builder_create(&sb);
-
-    string_builder_append(sb, "the following argument(s) are required: ", 40);
-
-    string_slice *ss = NULL;
-    string_slice *output = NULL;
-    char *opt_args = NULL;
-
-    string_builder_build(parser->req_opt_args, &opt_args);
-
-    if (((result = string_slice_create(&ss, opt_args, strlen(opt_args))) !=
-         0) ||
-        (result = string_slice_create(&output, NULL, 0)) != 0) {
-      RETURN_DEFER(result);
-    }
-
-    string_builder *arg_name = NULL;
-    argparser_argument *arg = NULL;
-    string_slice *flag_slice = NULL;
-    string_slice *name_slice = NULL;
-    char *flag = NULL;
-    char *name = NULL;
-    char *opt_str = NULL;
-
-    string_slice_trim(ss);
-
-    while (string_slice_split(ss, output, ' ') == 0) {
-      string_slice_to_string(output, &opt_str);
-      string_slice_create(&name_slice, opt_str, strlen(opt_str));
-      string_slice_create(&flag_slice, NULL, 0);
-      string_slice_split(name_slice, flag_slice, ',');
-      string_slice_to_string(flag_slice, &flag);
-      string_slice_to_string(name_slice, &name);
-
-      if (strncmp(flag, "-0", 2) != 0 && strncmp(name, "--0", 3) == 0) {
-        // flag found.
-        hash_table_search(parser->arguments, flag, (void *)&arg);
-
-        if (arg->value == NULL) {
-          char *concat_str = NULL;
-
-          string_builder_create(&arg_name);
-
-          if (arg->short_name != NULL) {
-            string_builder_append_fmtstr(arg_name, "%s", arg->short_name);
-          }
-
-          if (arg->short_name != NULL && arg->long_name != NULL) {
-            string_builder_append_char(arg_name, '/');
-          }
-
-          if (arg->long_name != NULL) {
-            string_builder_append_fmtstr(arg_name, "%s", arg->long_name);
-          }
-
-          string_builder_append_char(arg_name, ' ');
-
-          string_builder_build(arg_name, &concat_str);
-
-          string_builder_append(sb, concat_str, strlen(concat_str));
-          free(concat_str);
-        }
-        //} else if (strncmp(name, "--0", 3) != 0 && strncmp(flag, "-0", 2) ==
-        // 0) {
-        // name found.
-      } else {
-        // flag and name are defined.
-        hash_table_search(parser->arguments, name, (void *)&arg);
-
-        if (arg->value == NULL) {
-          char *concat_str = NULL;
-
-          string_builder_create(&arg_name);
-
-          if (arg->short_name != NULL) {
-            string_builder_append_fmtstr(arg_name, "%s", arg->short_name);
-          }
-
-          if (arg->short_name != NULL && arg->long_name != NULL) {
-            string_builder_append_char(arg_name, '/');
-          }
-
-          if (arg->long_name != NULL) {
-            string_builder_append_fmtstr(arg_name, "%s", arg->long_name);
-          }
-
-          string_builder_append_char(arg_name, ' ');
-
-          string_builder_build(arg_name, &concat_str);
-
-          string_builder_append(sb, concat_str, strlen(concat_str));
-          free(concat_str);
-        }
-      }
-
-      string_builder_destroy(&arg_name);
-      string_slice_destroy(&flag_slice);
-      string_slice_destroy(&name_slice);
-      free(flag);
-      flag = NULL;
-      free(name);
-      name = NULL;
-      free(opt_str);
-      opt_str = NULL;
-    }
-
-    if (current_pos_count == parser->pos_args_size) {
-      string_builder_build(sb, &message);
-      LOG_ERROR("%s", message);
-    }
-
-    string_slice_destroy(&ss);
-    string_slice_destroy(&output);
-    free(opt_args);
+    concat_required_optional_arguments(parser, &sb, current_pos_count,
+                                       &message);
   }
 
   if (current_pos_count < parser->pos_args_size) {
